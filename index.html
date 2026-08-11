@@ -1,0 +1,2279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LCMS Plate Layout Planner v8</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;user-select:none}
+input,textarea{user-select:text}
+:root{
+  --bg:#f7f7f5;--sf:#fff;--s2:#f2f1ee;--bd:#e0ddd8;
+  --tx:#1a1a18;--t2:#5a5a55;--t3:#9a9990;
+  --ac:#2563eb;--al:#eff4ff;
+  --mono:'JetBrains Mono','Fira Mono','Courier New',monospace;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --r:6px;--rl:10px;
+}
+body{font-family:var(--sans);font-size:13px;color:var(--tx);background:var(--bg);min-height:100vh}
+h2{font-size:18px;font-weight:600;margin-bottom:4px}
+h3{font-size:13px;font-weight:600;margin-bottom:6px;color:var(--t2)}
+.app{display:grid;grid-template-columns:252px 1fr;min-height:100vh;transition:grid-template-columns .15s ease}
+.app.sb-collapsed{grid-template-columns:56px 1fr}
+.sidebar{background:var(--sf);border-right:1px solid var(--bd);padding:18px 14px;overflow-y:auto;overflow-x:hidden;position:sticky;top:0;height:100vh;transition:padding .15s ease}
+.app.sb-collapsed .sidebar{padding:18px 8px}
+.sb-toggle{position:absolute;top:14px;right:-13px;width:26px;height:26px;border-radius:50%;background:var(--sf);border:1px solid var(--bd);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;z-index:5}
+.sb-toggle:hover{background:var(--s2)}
+.app.sb-collapsed .app-title p,.app.sb-collapsed .nav-label,.app.sb-collapsed #sb-stats,.app.sb-collapsed #sb-palette,.app.sb-collapsed .sidebar>hr,.app.sb-collapsed .sb-zoom,.app.sb-collapsed .erb-label,.app.sb-collapsed .progress-track{display:none}
+.app.sb-collapsed .nav-item{justify-content:center;padding:7px 4px}
+.app.sb-collapsed .logo-full{display:none}
+.logo-short{display:none}
+.app.sb-collapsed .logo-short{display:inline}
+.main{padding:24px;overflow-y:auto}
+.app-title{margin-bottom:20px}
+.app-title h1{font-size:19px;font-weight:600}
+.app-title p{font-size:11px;color:var(--t3);margin-top:2px}
+.progress-track{height:4px;background:var(--s2);border-radius:2px;overflow:hidden;margin:10px 0 16px}
+.progress-fill{height:100%;background:var(--ac);width:0%;transition:width .25s ease}
+.sb-zoom{margin-top:10px}
+.sb-zoom-label{font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.nav-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:var(--r);cursor:pointer;font-size:13px;color:var(--t2);margin-bottom:2px}
+.nav-item:hover{background:var(--s2)}
+.nav-item.active{background:var(--al);color:var(--ac);font-weight:500}
+.sn{width:18px;height:18px;border-radius:50%;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0}
+.nav-item.active .sn{background:var(--ac);color:#fff}
+.nav-item.done .sn{background:#16a34a;color:#fff}
+.card{background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);padding:14px 16px;margin-bottom:12px}
+.field{margin-bottom:9px}
+.field label{display:block;font-size:11px;color:var(--t2);margin-bottom:3px;font-weight:500}
+input[type=text],input[type=number],select{width:100%;height:31px;border:1px solid var(--bd);border-radius:var(--r);padding:0 9px;font-size:12px;font-family:var(--sans);background:var(--sf);color:var(--tx);outline:none}
+input:focus,select:focus{border-color:var(--ac)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.g4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.cb{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--t2);margin-bottom:5px}
+.cb input{width:auto;height:auto}
+.tl{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:7px;min-height:22px}
+.tag{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:11px;border:1px solid var(--bd);background:var(--s2)}
+.tag.test{background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8}
+.tag.nc{background:#f0fdf4;border-color:#bbf7d0;color:#166534}
+.tag.pc{background:#fdf4ff;border-color:#e9d5ff;color:#7e22ce}
+.tag.donor{background:#fff7ed;border-color:#fed7aa;color:#c2410c}
+.tag.tp{background:#f0f9ff;border-color:#bae6fd;color:#0369a1}
+.tag button{background:none;border:none;cursor:pointer;color:inherit;opacity:.5;font-size:13px;padding:0;line-height:1}
+.tag button:hover{opacity:1}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:6px 13px;border-radius:var(--r);font-size:12px;font-weight:500;cursor:pointer;border:1px solid var(--bd);background:var(--sf);color:var(--tx)}
+.btn:hover{background:var(--s2)}
+.btn-p{background:var(--ac);color:#fff;border-color:var(--ac)}
+.btn-p:hover{background:#1d4ed8}
+.btn-sm{padding:3px 9px;font-size:11px}
+.bg{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.sec{display:none}.sec.active{display:block}
+.ph2{margin-bottom:18px;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px}
+.ph2 p{font-size:12px;color:var(--t2);margin-top:2px}
+.note{background:var(--s2);border-left:3px solid var(--ac);border-radius:0 var(--r) var(--r) 0;padding:7px 11px;font-size:11px;color:var(--t2);margin-bottom:12px;line-height:1.5}
+.sg{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}
+.st{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:7px 10px}
+.st .v{font-size:18px;font-weight:600;line-height:1}
+.st .l{font-size:10px;color:var(--t3);margin-top:1px}
+
+/* ===== EDITOR TOOLBAR (sticky, shows selection + apply palette) ===== */
+.editor-toolbar{position:sticky;top:0;z-index:40;background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);padding:10px 14px;margin-bottom:16px;box-shadow:0 2px 8px rgba(0,0,0,.04)}
+.et-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.et-label{font-size:11px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-right:2px}
+.et-sel-count{font-size:11px;color:var(--ac);font-weight:600;background:var(--al);padding:2px 8px;border-radius:10px}
+.et-palette{display:flex;gap:5px;flex-wrap:wrap}
+.et-chip{padding:3px 10px;border-radius:14px;font-size:11px;border:1px solid var(--bd);cursor:pointer;background:var(--sf);transition:transform .08s}
+.et-chip:hover{transform:translateY(-1px)}
+.et-chip:active{transform:translateY(0)}
+.et-chip.donor{background:#fff7ed;border-color:#fed7aa;color:#c2410c}
+.et-chip.compound{background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8}
+.et-chip.tp{background:#f0f9ff;border-color:#bae6fd;color:#0369a1}
+.et-chip.clear{background:#fef2f2;border-color:#fecaca;color:#b91c1c}
+.et-chip.water{background:#dbeafe;border-color:#93c5fd;color:#1e40af}
+.et-sep{width:1px;height:20px;background:var(--bd)}
+.et-hint{font-size:10.5px;color:var(--t3);margin-top:6px}
+
+/* ===== PLATE GRID (editable) ===== */
+.psec{margin-bottom:24px}
+.phr{display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap}
+.pn{font-size:13px;font-weight:600}
+.pcb{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px}
+.pgw{overflow-x:auto;-webkit-user-select:none}
+.pg96{display:grid;grid-template-columns:18px repeat(12,minmax(calc(38px * var(--well-scale,1)),1fr));gap:2px;min-width:calc(520px * var(--well-scale,1));position:relative;touch-action:none}
+.pgvial{display:grid;grid-template-columns:18px repeat(9,minmax(calc(46px * var(--well-scale,1)),1fr));gap:2px;min-width:calc(460px * var(--well-scale,1));touch-action:none}
+.xh{display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;color:var(--t3);height:16px;cursor:pointer}
+.xh:hover{color:var(--ac)}
+.rl{display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;color:var(--t3);cursor:pointer}
+.rl:hover{color:var(--ac)}
+.well{height:calc(42px * var(--well-scale,1));border:1px solid rgba(0,0,0,.08);border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:calc(6.5px * var(--well-scale,1));text-align:center;line-height:1.2;overflow:hidden;padding:1px;position:relative;cursor:cell}
+.well.selected{outline:2px solid var(--ac);outline-offset:-1px;z-index:5}
+.well.selected::after{content:'';position:absolute;inset:0;background:rgba(37,99,235,.12)}
+.well.kfocus{box-shadow:0 0 0 2px #f59e0b,0 0 0 4px rgba(245,158,11,.25) inset;z-index:7}
+.pgvial .well{height:calc(46px * var(--well-scale,1))}
+.well.move-target{outline:2px solid #f59e0b;outline-offset:-1px;z-index:6}
+.well.move-target::after{content:'';position:absolute;inset:0;background:rgba(245,158,11,.18)}
+.well:hover .wt{display:block}
+.wt{display:none;position:absolute;bottom:calc(100% + 4px);left:50%;transform:translateX(-50%);background:#1a1a18;color:#fff;padding:4px 8px;border-radius:4px;font-size:10px;white-space:nowrap;z-index:99;pointer-events:none;line-height:1.5}
+.w-e{background:#f5f5f3}
+.w-w{background:#bfdbfe;border-color:#60a5fa!important;color:#1e3a8a}
+.w-pbs{background:#e2e8f0;color:#334155}
+.w-dm{background:#fed7aa;color:#7c2d12}
+.w-cal{background:#fef3c7;color:#92400e}
+.w-bl{background:#e5e7eb;color:#374151}
+.w-qc{background:#d1fae5;color:#065f46}
+.w-sd{background:#1e1e1e;color:#e5e7eb}
+.w-bal{background:#f9fafb;border:1px dashed #d1d5db!important;color:#9ca3af}
+.ppair{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:8px}
+.leg{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.li{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--t2)}
+.ld{width:10px;height:10px;border-radius:2px;flex-shrink:0;border:.5px solid rgba(0,0,0,.12)}
+
+/* mini-popover for individual well edit */
+.well-pop{position:absolute;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);box-shadow:0 4px 16px rgba(0,0,0,.12);padding:8px;z-index:200;min-width:160px}
+.well-pop .wp-row{display:flex;gap:4px;margin-bottom:4px;flex-wrap:wrap}
+.well-pop select,.well-pop input{font-size:11px;height:26px}
+
+/* ===== SUBMIT TABLE ===== */
+.tw{overflow-x:auto;border:1px solid var(--bd);border-radius:var(--rl)}
+table{width:100%;border-collapse:collapse;font-size:11px}
+thead th{background:var(--s2);padding:6px 9px;text-align:left;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--t2);border-bottom:1px solid var(--bd);white-space:nowrap}
+tbody td{padding:4px 8px;border-bottom:.5px solid var(--bd);vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+tr.selected-row td{background:rgba(37,99,235,.08)!important}
+.fn{font-family:var(--mono);font-size:10px}
+.rp{background:rgba(219,234,254,.4)}.rn{background:rgba(254,243,199,.4)}
+.rb{background:#f5f5f3}.rq{background:rgba(209,250,229,.4)}
+.rpr{background:rgba(254,226,226,.4)}.rs{background:#1e1e1e}.rs td{color:#e5e7eb}
+.pair-top td{border-bottom:none!important}
+.pair-bot td{border-top:.5px dashed #c7d2fe!important}
+.mb{display:inline-block;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:600}
+.mp{background:#dbeafe;color:#1d4ed8}.mn{background:#fef3c7;color:#b45309}
+.mbl{background:#e5e7eb;color:#374151}.mq{background:#d1fae5;color:#065f46}
+.mpr{background:#fee2e2;color:#991b1b}.ms{background:#1e1e1e;color:#fff}
+.es{text-align:center;padding:60px 20px;color:var(--t3)}
+.lookup{font-size:10px;border-collapse:collapse;width:100%;margin-top:12px}
+.lookup td,.lookup th{padding:3px 8px;border:.5px solid var(--bd)}
+.lookup th{background:var(--s2);font-weight:600}
+.live-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#16a34a;font-weight:600}
+.live-dot{width:6px;height:6px;border-radius:50%;background:#16a34a;animation:pulse 1.6s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.plate-add-row{display:flex;gap:8px;margin-bottom:14px}
+</style>
+</head>
+<body>
+<div class="app" id="app-root">
+<div class="sidebar" id="sidebar">
+  <button class="sb-toggle" id="sb-toggle" onclick="toggleSidebar()" title="Collapse/expand sidebar">◂</button>
+  <div class="app-title"><h1><span class="logo-full">LCMS Planner</span><span class="logo-short">LP</span></h1><p>deepwell → collect → LCMS → submit</p></div>
+  <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+  <div class="nav-item active" id="nav-setup" onclick="go('setup')" title="Experiment setup"><div class="sn">1</div><span class="nav-label">Experiment setup</span></div>
+  <div class="nav-item" id="nav-dw" onclick="go('dw')" title="Deepwell plates"><div class="sn">2</div><span class="nav-label">Deepwell plates</span></div>
+  <div class="nav-item" id="nav-cp" onclick="go('cp')" title="Collect plates"><div class="sn">3</div><span class="nav-label">Collect plates</span></div>
+  <div class="nav-item" id="nav-lp" onclick="go('lp')" title="LCMS plate layout"><div class="sn">4</div><span class="nav-label">LCMS plate layout</span></div>
+  <div class="nav-item" id="nav-sub" onclick="go('sub')" title="Submission file"><div class="sn">5</div><span class="nav-label">Submission file</span></div>
+  <hr style="border:none;border-top:1px solid var(--bd);margin:14px 0">
+  <div id="sb-stats" style="font-size:11px;color:var(--t3)">Generate layout to see summary.</div>
+  <div class="sb-zoom">
+    <div class="sb-zoom-label">Well size</div>
+    <div class="row" style="gap:4px">
+      <button class="btn btn-sm" onclick="adjustZoom(-0.1)" title="Smaller wells">−</button>
+      <span id="zoom-pct" style="font-size:11px;width:38px;text-align:center;display:inline-block">100%</span>
+      <button class="btn btn-sm" onclick="adjustZoom(0.1)" title="Larger wells">+</button>
+    </div>
+  </div>
+  <hr style="border:none;border-top:1px solid var(--bd);margin:14px 0">
+  <button class="btn btn-sm" style="width:100%;justify-content:center" onclick="exportExperimentRecord()">📄 <span class="erb-label">Export experiment record</span></button>
+  <div id="sb-palette"></div>
+</div>
+
+<div class="main" id="main"></div>
+</div>
+
+<script>
+/* =====================================================================
+   LCMS PLANNER v8 — fully editable plates with drag-select + palette
+   Data model:
+   - Each plate (deepwell / collect / lcms) is a first-class object with
+     an 8x12 `wells` array. Each well is either null or a cell object:
+     {stype, donor, cpd, rep, tp, mode, label, ...}
+   - Deepwell and Collect plates are independently editable.
+   - LCMS plate is independently editable too (per requirements).
+   - Submission file is *derived* live from the LCMS plate + vial holder
+     + run settings — any edit to LCMS plate triggers a re-render of
+     the submission table immediately.
+   ===================================================================== */
+
+const R8=['A','B','C','D','E','F','G','H'];
+const R6=['A','B','C','D','E','F'];
+const PC=['R','B','Y','G'];
+const PB={R:'#fee2e2',B:'#dbeafe',Y:'#fef9c3',G:'#dcfce7'};
+const DC=['#fde68a','#bbf7d0','#fecdd3','#e9d5ff','#bae6fd','#fbcfe8'];
+const DCT=['#78350f','#14532d','#881337','#581c87','#0c4a6e','#831843'];
+
+function todayYYYYMMDD(){
+  const d=new Date();
+  return d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
+}
+function nowTimestamp(){
+  const d=new Date();
+  const pad=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+let donors=[],compounds=[],timepoints=[];
+let S=null; // current settings snapshot
+
+// ---- Plate state containers ----
+// dwPlates: [{id,grid:[8][12],label}]
+// cpPlates: [{id,grid:[8][12],label,tp,isBalance}]
+// lcmsPlates: [{id,color,grid:[8][12]}]
+// vialHolder: [6][9]
+let dwPlates=[],cpPlates=[],lcmsPlates=[],vialHolder=[];
+let nextDwId=1,nextCpId=1,nextLpId=1;
+
+function emptyGrid(){return Array.from({length:8},()=>new Array(12).fill(null));}
+function emptyVH(){return Array.from({length:6},()=>new Array(9).fill(null));}
+
+/* Autosampler has 4 physical slots (R/B/Y/G). If the vial holder occupies one
+   of them, only the remaining 3 are available for LCMS plates, and the
+   rotation starts from S.plateColor among those remaining colors. */
+function availableLcmsColors(){
+  const pool=PC.filter(c=>c!==S.vhColor);
+  const startIdx=pool.indexOf(S.plateColor);
+  const start=startIdx>=0?startIdx:0;
+  return[...pool.slice(start),...pool.slice(0,start)];
+}
+function lcmsColorAt(idx){
+  const colors=availableLcmsColors();
+  return colors[idx%colors.length];
+}
+
+function donorBg(donor){const i=donors.indexOf(donor);return i>=0?{bg:DC[i%6],fg:DCT[i%6]}:{bg:'#e2e8f0',fg:'#334155'};}
+
+function go(view){
+  document.querySelectorAll('.nav-item').forEach(e=>e.classList.remove('active'));
+  document.getElementById('nav-'+view).classList.add('active');
+  kbFocus=null;kbAnchor=null;
+  renderMain(view);
+}
+
+/* =====================================================================
+   SETUP VIEW
+   ===================================================================== */
+function renderSetup(){
+  const main=document.getElementById('main');
+  main.innerHTML=`
+  <div class="ph2"><h2>Experiment setup</h2></div>
+  <div class="card">
+    <h3>Instrument &amp; run</h3>
+    <div class="g4">
+      <div class="field"><label>Date (YYYYMMDD)</label>
+        <div style="display:flex;gap:4px">
+          <input type="text" id="run-date" value="${S?.date||todayYYYYMMDD()}" style="flex:1">
+          <button class="btn btn-sm" onclick="document.getElementById('run-date').value=todayYYYYMMDD()" title="Set to today">↻</button>
+        </div>
+      </div>
+      <div class="field"><label>Column</label><select id="col-type"><option value="Rp" ${S?.col==='Rp'?'selected':''}>RP</option><option value="Hi" ${S?.col==='Hi'?'selected':''}>HILIC</option></select></div>
+      <div class="field"><label>First LCMS plate color</label><select id="plate-color">${PC.map(c=>`<option value="${c}" ${S?.plateColor===c?'selected':''}>${c}</option>`).join('')}</select></div>
+      <div class="field"><label>Vial holder occupies slot</label><select id="vh-color">${PC.map(c=>`<option value="${c}" ${(S?.vhColor||'G')===c?'selected':''}>${c}</option>`).join('')}</select></div>
+      <div class="field"><label>Blank/QC interval</label><input type="number" id="qc-interval" value="${S?.qcInterval||16}" min="4" max="40"></div>
+    </div>
+    <div class="g4">
+      <div class="field"><label>Pre-blanks</label><input type="number" id="pre-blanks" value="${S?.preBlanks||3}" min="1"></div>
+      <div class="field"><label>Post-blanks</label><input type="number" id="post-blanks" value="${S?.postBlanks||3}" min="1"></div>
+      <div class="field"><label>Blank vial (R:__)</label><input type="text" id="blank-pos" value="${S?.blankRaw||'A1'}"></div>
+      <div class="field"><label>QC vial (R:__)</label><input type="text" id="qc-pos" value="${S?.qcRaw||'B1'}"></div>
+    </div>
+    <div class="cb"><input type="checkbox" id="mode-pos" ${S?.modePos!==false?'checked':''}><label style="margin:0">Positive mode</label></div>
+    <div class="cb"><input type="checkbox" id="mode-neg" ${S?.modeNeg!==false?'checked':''}><label style="margin:0">Negative mode — same well, consecutive injection</label></div>
+    <div class="cb"><input type="checkbox" id="has-shutdown" ${S?.hasShutdown!==false?'checked':''}><label style="margin:0">Shutdown at end (RP method)</label></div>
+  </div>
+
+  <div class="card">
+    <h3>Donors &nbsp;<span style="font-size:11px;font-weight:400;color:var(--t3)">3 rows each</span></h3>
+    <div class="tl" id="donors-list"></div>
+    <div class="row">
+      <input type="text" id="donor-input" placeholder="Donor ID e.g. 1" style="width:130px">
+      <button class="btn btn-sm" onclick="addDonor()">+ add</button>
+      <div class="cb" style="margin:0 0 0 10px"><input type="checkbox" id="has-pbs" ${S?.hasPBS!==false?'checked':''}><label style="margin:0">PBS abiotic ctrl (3 rows)</label></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Compounds &nbsp;<span style="font-size:11px;font-weight:400;color:var(--t3)">one column each</span></h3>
+    <div class="tl" id="compounds-list"></div>
+    <div class="row">
+      <input type="text" id="cpd-abbr" placeholder="Abbreviation" style="width:90px">
+      <input type="text" id="cpd-name" placeholder="Full name (optional)" style="width:155px">
+      <select id="cpd-type" style="width:130px">
+        <option value="test">test compound</option>
+        <option value="nc">negative ctrl (NC)</option>
+        <option value="pc">positive ctrl (PC)</option>
+      </select>
+      <input type="number" id="cpd-stock" placeholder="stock conc" value="10" style="width:90px">
+      <select id="cpd-stock-unit" style="width:70px"><option>mM</option><option>µM</option><option>mg/mL</option></select>
+      <button class="btn btn-sm" onclick="addCompound()">+ add</button>
+    </div>
+    <div class="note" style="margin-top:6px;margin-bottom:0;font-size:11px">Stock concentration is the DMSO mother solution (e.g. 10 mM in 5–10 mL) — used by the exposure-mix calculator below to back-calculate dilution volumes.</div>
+    <div class="cb" style="margin-top:8px"><input type="checkbox" id="has-dmso-ctrl" ${S?.hasDmsoCtrl!==false?'checked':''}><label style="margin:0">DMSO vehicle ctrl — 1 col start + 1 col end</label></div>
+  </div>
+
+  <div class="card">
+    <h3>Timepoints</h3>
+    <div class="tl" id="tp-list"></div>
+    <div class="row">
+      <input type="text" id="tp-input" placeholder="e.g. 0, 24" style="width:160px">
+      <button class="btn btn-sm" onclick="addTP()">+ add</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Calibration line</h3>
+    <div class="g3">
+      <div class="field"><label>Replicates (technical)</label><input type="number" id="cal-reps" value="${S?.calReps||2}" min="1" max="6"></div>
+      <div class="field"><label>When to inject</label>
+        <select id="cal-strat"><option value="per-tp">Before each timepoint group</option><option value="once">Once at start</option></select>
+      </div>
+      <div class="field"><label>Cal location</label>
+        <select id="cal-loc"><option value="vial">Vial holder</option><option value="plate">LCMS plate wells</option></select>
+      </div>
+    </div>
+    <div class="field"><label>Concentrations (comma-sep)</label>
+      <input type="text" id="cal-concs" value="${S?.calConcs?.join(',')||'1,25,100,500,5000'}">
+    </div>
+    <div class="note" style="margin-top:6px;margin-bottom:0;font-size:11px">Vial holder: 6 rows (A–F) × 9 cols (1–9), format R:A1. Technical replicates = same vial, injected multiple times.</div>
+  </div>
+
+  <div class="bg">
+    <button class="btn" onclick="loadDemo()">↺ load demo</button>
+    <button class="btn btn-p" onclick="generate()">Generate layout →</button>
+  </div>`;
+  rdD();rdC();rdT();
+  if(S){
+    document.getElementById('cal-strat').value=S.calStrat||'per-tp';
+    document.getElementById('cal-loc').value=S.calLoc||'vial';
+  }
+}
+
+function addDonor(){const v=document.getElementById('donor-input').value.trim();if(!v||donors.includes(v))return;donors.push(v);document.getElementById('donor-input').value='';rdD();}
+function addCompound(){const a=document.getElementById('cpd-abbr').value.trim();if(!a)return;const stockConc=parseFloat(document.getElementById('cpd-stock').value)||10;const stockUnit=document.getElementById('cpd-stock-unit').value||'mM';compounds.push({abbr:a,name:document.getElementById('cpd-name').value.trim(),type:document.getElementById('cpd-type').value,stockConc,stockUnit});document.getElementById('cpd-abbr').value='';document.getElementById('cpd-name').value='';rdC();}
+function addTP(){const v=document.getElementById('tp-input').value.trim();if(!v)return;v.split(',').forEach(x=>{const t=x.trim();if(t&&!timepoints.includes(t))timepoints.push(t);});document.getElementById('tp-input').value='';rdT();}
+function rdD(){const el=document.getElementById('donors-list');if(el) el.innerHTML=donors.map((d,i)=>`<span class="tag donor">${d}<button onclick="donors.splice(${i},1);rdD()">×</button></span>`).join('');scheduleSave();}
+function rdC(){const el=document.getElementById('compounds-list');if(el) el.innerHTML=compounds.map((c,i)=>`<span class="tag ${c.type}">${c.abbr}${c.name?' — '+c.name:''} <span style="opacity:.6">[${c.type}, ${c.stockConc||10}${c.stockUnit||'mM'}]</span><button onclick="compounds.splice(${i},1);rdC()">×</button></span>`).join('');scheduleSave();}
+function rdT(){const el=document.getElementById('tp-list');if(el) el.innerHTML=timepoints.map((t,i)=>`<span class="tag tp">${t}h<button onclick="timepoints.splice(${i},1);rdT()">×</button></span>`).join('');scheduleSave();}
+
+function loadDemo(){
+  donors=['1','2','3'];
+  compounds=[{abbr:'ant',name:'Antazoline',type:'nc',stockConc:10,stockUnit:'mM'},{abbr:'pre',name:'Pretomanide',type:'test',stockConc:10,stockUnit:'mM'},
+    {abbr:'4tr',name:'4-(Trifluoromethoxy)benzyl Alcohol',type:'test',stockConc:10,stockUnit:'mM'},{abbr:'4me',name:'4-Methoxybenzyl Alcohol',type:'test',stockConc:10,stockUnit:'mM'},
+    {abbr:'hyd',name:'Hydroxyflutamide',type:'test',stockConc:10,stockUnit:'mM'},{abbr:'sul',name:'Sulfinpyrazone',type:'pc',stockConc:10,stockUnit:'mM'}];
+  timepoints=['0','24'];
+  rdD();rdC();rdT();
+}
+
+function getS(){
+  const blankRaw=(document.getElementById('blank-pos').value||'A1').trim().toUpperCase().replace(/^[A-Z]:/,'');
+  const qcRaw=(document.getElementById('qc-pos').value||'B1').trim().toUpperCase().replace(/^[A-Z]:/,'');
+  const vhColor=document.getElementById('vh-color').value;
+  return{
+    date:document.getElementById('run-date').value.trim(),
+    col:document.getElementById('col-type').value,
+    plateColor:document.getElementById('plate-color').value,
+    vhColor,
+    qcInterval:parseInt(document.getElementById('qc-interval').value)||16,
+    preBlanks:parseInt(document.getElementById('pre-blanks').value)||3,
+    postBlanks:parseInt(document.getElementById('post-blanks').value)||3,
+    blankRaw,qcRaw,
+    blankPos:vhColor+':'+blankRaw, qcPos:vhColor+':'+qcRaw,
+    modePos:document.getElementById('mode-pos').checked,
+    modeNeg:document.getElementById('mode-neg').checked,
+    hasShutdown:document.getElementById('has-shutdown').checked,
+    hasPBS:document.getElementById('has-pbs').checked,
+    hasDmsoCtrl:document.getElementById('has-dmso-ctrl').checked,
+    calReps:parseInt(document.getElementById('cal-reps').value)||2,
+    calStrat:document.getElementById('cal-strat').value,
+    calLoc:document.getElementById('cal-loc').value,
+    calConcs:document.getElementById('cal-concs').value.split(',').map(x=>x.trim()).filter(Boolean),
+  };
+}
+
+/* =====================================================================
+   INITIAL LAYOUT GENERATION (creates editable plate objects)
+   ===================================================================== */
+function buildCols(s){
+  const c=[];
+  if(s.hasDmsoCtrl) c.push({cpd:'DMSO',type:'dmso'});
+  for(const x of compounds) c.push({cpd:x.abbr,type:x.type});
+  if(s.hasDmsoCtrl) c.push({cpd:'DMSO',type:'dmso'});
+  return c;
+}
+function buildRG(s){
+  const rg=[];
+  for(const d of donors) rg.push({donor:d,type:'donor'});
+  if(s.hasPBS) rg.push({donor:'PBS',type:'pbs'});
+  return rg;
+}
+function makeGrid(rGroups,cols,tp,withWater){
+  const g=emptyGrid();
+  let ro=1;
+  for(const grp of rGroups){
+    for(let rep=0;rep<3;rep++){
+      const ri=ro+rep; if(ri>7) continue;
+      for(let ci=0;ci<Math.min(cols.length,10);ci++){
+        const col=cols[ci];
+        g[ri][ci+1]={stype:grp.type==='pbs'?'pbs':(col.type==='dmso'?'dmso':'sample'),
+          donor:grp.donor,cpd:col.cpd,rep:rep+1,tp:tp||null,
+          label:`${col.cpd}_donor_${grp.donor}_${rep+1}${tp!=null?'_'+tp:''}`};
+      }
+    }
+    ro+=3;
+  }
+  if(withWater){
+    let r0=8,r1=-1,c0=12,c1=-1;
+    for(let r=0;r<8;r++) for(let c=0;c<12;c++){
+      if(g[r][c]){r0=Math.min(r0,r);r1=Math.max(r1,r);c0=Math.min(c0,c);c1=Math.max(c1,c);}
+    }
+    if(r0<=r1) for(let r=r0-1;r<=r1+1;r++) for(let c=c0-1;c<=c1+1;c++){
+      if(r>=0&&r<8&&c>=0&&c<12&&!g[r][c]) g[r][c]={stype:'water'};
+    }
+  }
+  return g;
+}
+
+function relabel(cell){
+  // Recompute label from current stype/donor/cpd/rep/tp/mode — keeps names consistent after edits
+  if(!cell) return cell;
+  if(cell.stype==='water'||cell.stype==='balance'||cell.stype==='empty') return cell;
+  const base=`${cell.cpd||'?'}_donor_${cell.donor||'?'}_${cell.rep||1}`;
+  cell.label=cell.tp!=null?`${base}_${cell.tp}`:base;
+  return cell;
+}
+
+function generate(){
+  if(!donors.length||!compounds.length||!timepoints.length){alert('Add donors, compounds and timepoints first (or load demo).');return;}
+  S=getS();
+  subOverrides={};
+  subDeletedBaseRows=new Set();
+  subInsertedRows=[];
+  clearAllSelections();
+  undoStack=[];redoStack=[];
+  // Build deepwell plates
+  const rg=buildRG(S),cols=buildCols(S);
+  dwPlates=[];
+  for(let gi=0;gi<rg.length;gi+=2){
+    const grp=rg.slice(gi,gi+2);
+    dwPlates.push({id:nextDwId++,grid:makeGrid(grp,cols,null,true),rowGroups:grp,cols,label:'Deepwell plate'});
+  }
+  // Build collect plates (per timepoint, mirrors deepwell groupings, no water)
+  cpPlates=[];
+  for(const tp of timepoints){
+    for(const dwp of dwPlates){
+      cpPlates.push({id:nextCpId++,grid:makeGrid(dwp.rowGroups,dwp.cols,tp,false),rowGroups:dwp.rowGroups,cols:dwp.cols,tp,label:'Collect plate'});
+    }
+  }
+  if(cpPlates.length%2!==0) cpPlates.push({id:nextCpId++,grid:emptyGrid(),rowGroups:[],cols:[],isBalance:true,tp:null,label:'Balance plate'});
+
+  // Build LCMS plates by packing all non-empty collect wells row-by-row
+  buildLcmsFromCollect();
+
+  ['dw','cp','lp','sub'].forEach(n=>document.getElementById('nav-'+n).classList.add('done'));
+  go('dw');
+}
+
+function buildLcmsFromCollect(){
+  vialHolder=emptyVH();
+  function vhParse(raw){const m=raw.match(/^([A-F])(\d)$/i);return m?[m[1].toUpperCase().charCodeAt(0)-65,parseInt(m[2])-1]:null;}
+  function vhSet(raw,val){const p=vhParse(raw);if(p&&p[0]<6&&p[1]<9) vialHolder[p[0]][p[1]]=val;}
+  vhSet(S.blankRaw,'blank');
+  vhSet(S.qcRaw,'qc');
+
+  let cvR=2,cvC=0;
+  function nextCalVial(){
+    while(cvR<6){
+      if(!vialHolder[cvR][cvC]){const pos=S.vhColor+':'+R6[cvR]+(cvC+1);vialHolder[cvR][cvC]='cal-reserved';cvC++;if(cvC>=9){cvC=0;cvR++;}return pos;}
+      cvC++;if(cvC>=9){cvC=0;cvR++;}
+    }
+    return S.vhColor+':?';
+  }
+  if(S.calLoc==='vial'){
+    for(const c of compounds.filter(x=>x.type==='test')){
+      for(const conc of S.calConcs){
+        const pos=nextCalVial();
+        const p=vhParse(pos.replace(S.vhColor+':',''));
+        if(p) vialHolder[p[0]][p[1]]={stype:'cal',cpd:c.abbr,conc,label:`${c.abbr}_${conc}`};
+      }
+    }
+  }
+
+  // gather sample wells in order: tp -> collect plate -> row -> col
+  const sampleWells=[];
+  cpPlates.forEach((plate,pi)=>{
+    if(plate.isBalance) return;
+    for(let r=0;r<8;r++) for(let c=0;c<12;c++){
+      const cell=plate.grid[r][c];
+      if(cell&&cell.stype!=='water') sampleWells.push({...cell});
+    }
+  });
+  // sort by timepoint order matching `timepoints` array
+  sampleWells.sort((a,b)=>timepoints.indexOf(a.tp)-timepoints.indexOf(b.tp));
+
+  // cal-on-plate rows
+  function calPlateCells(){
+    const out=[];
+    for(const c of compounds.filter(x=>x.type==='test'))
+      for(const conc of S.calConcs)
+        for(let rep=1;rep<=S.calReps;rep++)
+          out.push({stype:'cal',cpd:c.abbr,conc,rep,label:`${c.abbr}_${conc}_${rep}`});
+    return out;
+  }
+
+  // Pack into LCMS plates row-by-row, no gaps
+  lcmsPlates=[];
+  let lpIdx=0,wellIdx=0;
+  function getLp(idx){
+    if(!lcmsPlates[idx]) lcmsPlates[idx]={id:nextLpId++,color:lcmsColorAt(idx),grid:emptyGrid(),label:'LCMS plate'};
+    return lcmsPlates[idx];
+  }
+  function place(cellObj){
+    if(wellIdx>=96){wellIdx=0;lpIdx++;}
+    const lp=getLp(lpIdx);
+    const r=Math.floor(wellIdx/12),c=wellIdx%12;
+    lp.grid[r][c]=cellObj;
+    wellIdx++;
+  }
+
+  let calDone=false;
+  if(S.calStrat==='once'&&S.calLoc==='plate'){for(const cc of calPlateCells()) place(cc);calDone=true;}
+  for(const tp of timepoints){
+    if(S.calStrat==='per-tp'&&S.calLoc==='plate') for(const cc of calPlateCells()) place(cc);
+    const tpWells=sampleWells.filter(w=>w.tp===tp);
+    for(const w of tpWells) place(w);
+  }
+  if(lcmsPlates.length===0) getLp(0); // ensure at least one plate exists
+}
+
+/* =====================================================================
+   GENERIC EDITABLE GRID RENDERER (deepwell / collect / lcms share this)
+   ===================================================================== */
+let dragState=null; // {plateKind, plateIdx, startR, startC, curR, curC}
+let clipboard=null; // {cells:[{dr,dc,cell}], rows, cols} relative to anchor (top-left of original selection)
+let lastClickedCell=null; // {kind,idx,r,c} — paste target anchor
+let moveMode=false; // when true, dragging moves a single well's content instead of selecting a rect
+let moveDrag=null; // {fromKind,fromIdx,fromR,fromC,sourceCell}
+let hoverTarget=null; // {kind,idx,r,c} — last well under cursor during a move drag
+let selections={}; // key: `${kind}:${plateIdx}` -> Set of "r,c"
+let kbFocus=null; // {kind,idx,r,c} — keyboard-navigable focus cell
+let kbAnchor=null; // {r,c} — rectangle anchor for Shift+Arrow selection
+
+function selKey(kind,idx){return `${kind}:${idx}`;}
+function clearAllSelections(){selections={};}
+function getSel(kind,idx){const k=selKey(kind,idx);if(!selections[k])selections[k]=new Set();return selections[k];}
+
+function cellSt(cell){
+  if(!cell) return{cls:'w-e',txt:'',tip:''};
+  if(cell.stype==='water') return{cls:'w-w',txt:'H₂O',tip:'water'};
+  if(cell.stype==='balance') return{cls:'w-bal',txt:'balance',tip:''};
+  if(cell.stype==='dmso') return{cls:'w-dm',txt:`DMSO<br>D${cell.donor}<br>r${cell.rep}${cell.tp!=null?' '+cell.tp+'h':''}`,tip:cell.label};
+  if(cell.stype==='pbs') return{cls:'w-pbs',txt:`${cell.cpd}<br>PBS r${cell.rep}${cell.tp!=null?'<br>'+cell.tp+'h':''}`,tip:cell.label};
+  if(cell.stype==='cal') return{cls:'w-cal',txt:`${cell.cpd}<br>${cell.conc}${cell.rep?'<br>r'+cell.rep:''}`,tip:cell.label||''};
+  if(cell.stype==='sample'){const{bg,fg}=donorBg(cell.donor);return{cls:'',style:`background:${bg};color:${fg}`,txt:`${cell.cpd}<br>D${cell.donor}<br>r${cell.rep}${cell.tp!=null?' '+cell.tp+'h':''}`,tip:cell.label};}
+  return{cls:'w-e',txt:'',tip:''};
+}
+
+function renderEditableGrid(kind,plateIdx,grid){
+  const sel=getSel(kind,plateIdx);
+  let h=`<div class="pgw"><div class="pg96" data-kind="${kind}" data-idx="${plateIdx}">`;
+  h+=`<div class="xh"></div>`;
+  for(let c=0;c<12;c++) h+=`<div class="xh" onclick="selectCol('${kind}',${plateIdx},${c})">${c+1}</div>`;
+  for(let r=0;r<8;r++){
+    h+=`<div class="rl" onclick="selectRow('${kind}',${plateIdx},${r})">${R8[r]}</div>`;
+    for(let c=0;c<12;c++){
+      const cs=cellSt(grid[r][c]);
+      const isSel=sel.has(r+','+c);
+      const inn=`<span class="wt">${cs.tip}</span>${cs.txt}`;
+      const styleAttr=cs.style?cs.style:'';
+      h+=`<div class="well ${cs.cls}${isSel?' selected':''}" style="${styleAttr}"
+            data-r="${r}" data-c="${c}"
+            onmousedown="startDrag(event,'${kind}',${plateIdx},${r},${c})"
+            onmouseenter="dragOver(event,'${kind}',${plateIdx},${r},${c})"
+            ondblclick="openCellEditor(event,'${kind}',${plateIdx},${r},${c})"
+            ontouchstart="wellTouchStart(event,'${kind}',${plateIdx},${r},${c})"
+          >${inn}</div>`;
+    }
+  }
+  h+='</div></div>';
+  return h;
+}
+
+function selectRow(kind,idx,r){
+  const sel=getSel(kind,idx);
+  const allSelected=Array.from({length:12},(_,c)=>sel.has(r+','+c)).every(Boolean);
+  for(let c=0;c<12;c++){ if(allSelected) sel.delete(r+','+c); else sel.add(r+','+c); }
+  syncAllSelectionDOM();
+  updateToolbar();
+}
+function selectCol(kind,idx,c){
+  const sel=getSel(kind,idx);
+  const allSelected=Array.from({length:8},(_,r)=>sel.has(r+','+c)).every(Boolean);
+  for(let r=0;r<8;r++){ if(allSelected) sel.delete(r+','+c); else sel.add(r+','+c); }
+  syncAllSelectionDOM();
+  updateToolbar();
+}
+
+/* Lightweight selection sync — toggles the .selected class on existing well
+   DOM nodes without rebuilding grid HTML. Used during drag-select so hovering
+   over many wells doesn't trigger a full re-render each time. */
+function syncAllSelectionDOM(){
+  document.querySelectorAll('[data-kind]').forEach(container=>{
+    const kind=container.dataset.kind, idx=parseInt(container.dataset.idx);
+    const sel=selections[selKey(kind,idx)];
+    container.querySelectorAll('.well').forEach(el=>{
+      const r=parseInt(el.dataset.r), c=parseInt(el.dataset.c);
+      el.classList.toggle('selected', !!(sel&&sel.has(r+','+c)));
+    });
+  });
+}
+
+/* =====================================================================
+   KEYBOARD NAVIGATION — Arrow keys move/extend the focused well, Enter
+   opens its editor, Escape clears selection. Focus is set whenever a
+   well is clicked/dragged (see startDrag).
+   ===================================================================== */
+function setKbFocus(kind,idx,r,c){
+  kbFocus={kind,idx,r,c};
+  kbAnchor=null;
+  syncFocusDOM();
+}
+function syncFocusDOM(){
+  document.querySelectorAll('.well.kfocus').forEach(el=>el.classList.remove('kfocus'));
+  if(!kbFocus) return;
+  const el=document.querySelector(`[data-kind="${kbFocus.kind}"][data-idx="${kbFocus.idx}"] .well[data-r="${kbFocus.r}"][data-c="${kbFocus.c}"]`);
+  if(el) el.classList.add('kfocus');
+}
+function wellEditorEvent(kind,idx,r,c){
+  const el=document.querySelector(`[data-kind="${kind}"][data-idx="${idx}"] .well[data-r="${r}"][data-c="${c}"]`);
+  if(!el) return null;
+  const rect=el.getBoundingClientRect();
+  return{pageX:rect.left+window.scrollX,pageY:rect.bottom+window.scrollY,stopPropagation(){}};
+}
+document.addEventListener('keydown',function(e){
+  if(!kbFocus) return;
+  const tag=(e.target.tagName||'').toLowerCase();
+  if(tag==='input'||tag==='textarea'||e.target.isContentEditable) return;
+  if(document.querySelector('.well-pop')) return; // don't steal keys while a popover is open
+  const{kind,idx}=kbFocus;
+  const rows=kind==='vh'?6:8, cols=kind==='vh'?9:12;
+  let{r,c}=kbFocus;
+
+  if(e.key==='Escape'){
+    e.preventDefault();
+    clearAllSelections();
+    kbFocus=null;kbAnchor=null;
+    syncFocusDOM();syncAllSelectionDOM();updateToolbar();
+    return;
+  }
+  if(e.key==='Enter'){
+    e.preventDefault();
+    const evt=wellEditorEvent(kind,idx,r,c);
+    if(!evt) return;
+    if(kind==='vh') openVHEditor(evt,r,c); else openCellEditor(evt,kind,idx,r,c);
+    return;
+  }
+  let moved=true;
+  if(e.key==='ArrowUp') r=Math.max(0,r-1);
+  else if(e.key==='ArrowDown') r=Math.min(rows-1,r+1);
+  else if(e.key==='ArrowLeft') c=Math.max(0,c-1);
+  else if(e.key==='ArrowRight') c=Math.min(cols-1,c+1);
+  else moved=false;
+  if(!moved) return;
+  e.preventDefault();
+  const oldR=kbFocus.r,oldC=kbFocus.c;
+  kbFocus={kind,idx,r,c};
+  const sel=getSel(kind,idx);
+  if(e.shiftKey){
+    if(!kbAnchor) kbAnchor={r:oldR,c:oldC};
+    sel.clear();
+    const r0=Math.min(kbAnchor.r,r),r1=Math.max(kbAnchor.r,r);
+    const c0=Math.min(kbAnchor.c,c),c1=Math.max(kbAnchor.c,c);
+    for(let rr=r0;rr<=r1;rr++) for(let cc=c0;cc<=c1;cc++) sel.add(rr+','+cc);
+  } else {
+    kbAnchor=null;
+    Object.keys(selections).forEach(k=>{ if(k!==selKey(kind,idx)) selections[k]=new Set(); });
+    sel.clear();sel.add(r+','+c);
+  }
+  syncAllSelectionDOM();
+  syncFocusDOM();
+  updateToolbar();
+  const el=document.querySelector(`[data-kind="${kind}"][data-idx="${idx}"] .well[data-r="${r}"][data-c="${c}"]`);
+  if(el&&el.scrollIntoView) el.scrollIntoView({block:'nearest',inline:'nearest'});
+});
+
+function startDrag(e,kind,idx,r,c){
+  lastClickedCell={kind,idx,r,c};
+  if(moveMode){
+    const grid=getPlateGrid(kind,idx);
+    const cell=grid[r][c];
+    if(!cell||cell.stype==='water'||cell.stype==='balance') return; // nothing to move
+    // Batch move: if this well is part of an existing multi-cell selection on
+    // the same plate, drag the whole block; otherwise just this single well.
+    const sel=getSel(kind,idx);
+    let cells;
+    if(sel.has(r+','+c)&&sel.size>1){
+      cells=Array.from(sel).map(key=>{
+        const[rr,cc]=key.split(',').map(Number);
+        return{r:rr,c:cc,cell:grid[rr][cc],dr:rr-r,dc:cc-c};
+      }).filter(x=>x.cell&&x.cell.stype!=='water'&&x.cell.stype!=='balance');
+    } else {
+      cells=[{r,c,cell,dr:0,dc:0}];
+    }
+    // Don't commit to a move yet — wait to see if the mouse actually moves
+    // (a stationary click should still allow double-click-to-edit / clear).
+    moveDrag={fromKind:kind,fromIdx:idx,anchorR:r,anchorC:c,cells,moved:false};
+    hoverTarget={kind,idx,r,c};
+    window.addEventListener('mouseup',endMoveDrag,{once:true});
+    return;
+  }
+  e.preventDefault();
+  // clear selections on other plates to avoid confusion; keep this plate's
+  if(!e.shiftKey){
+    Object.keys(selections).forEach(k=>{ if(k!==selKey(kind,idx)) selections[k]=new Set(); });
+  }
+  dragState={kind,idx,startR:r,startC:c,curR:r,curC:c,additive:e.shiftKey};
+  const sel2=getSel(kind,idx);
+  if(!e.shiftKey) sel2.clear();
+  applyDragRect();
+  syncAllSelectionDOM();
+  setKbFocus(kind,idx,r,c);
+  updateToolbar();
+  window.addEventListener('mouseup',endDrag,{once:true});
+}
+function dragOver(e,kind,idx,r,c){
+  if(moveMode){
+    if(!moveDrag) return;
+    if(!(kind===moveDrag.fromKind&&idx===moveDrag.fromIdx&&r===moveDrag.anchorR&&c===moveDrag.anchorC)){
+      moveDrag.moved=true;
+      if(!moveDrag.highlighted){ highlightMoveSource(true); moveDrag.highlighted=true; }
+    }
+    hoverTarget={kind,idx,r,c};
+    if(moveDrag.moved) highlightMoveTarget();
+    return;
+  }
+  if(!dragState||dragState.kind!==kind||dragState.idx!==idx) return;
+  dragState.curR=r;dragState.curC=c;
+  applyDragRect();
+  syncAllSelectionDOM();
+  setKbFocus(kind,idx,r,c);
+  updateToolbar();
+}
+function highlightMoveSource(on){
+  if(!moveDrag) return;
+  moveDrag.cells.forEach(({r,c})=>{
+    const el=document.querySelector(`[data-kind="${moveDrag.fromKind}"][data-idx="${moveDrag.fromIdx}"] .well[data-r="${r}"][data-c="${c}"]`);
+    if(el) el.style.outline=on?'2px dashed #f59e0b':'';
+  });
+}
+function highlightMoveTarget(){
+  document.querySelectorAll('.well.move-target').forEach(el=>el.classList.remove('move-target'));
+  if(!hoverTarget||!moveDrag) return;
+  // Highlight every destination cell the batch would land on
+  moveDrag.cells.forEach(({dr,dc})=>{
+    const tr=hoverTarget.r+dr,tc=hoverTarget.c+dc;
+    if(tr<0||tr>7||tc<0||tc>11) return; // out of bounds for 8x12 grids (vial holder is smaller, checked at drop time)
+    const el=document.querySelector(`[data-kind="${hoverTarget.kind}"][data-idx="${hoverTarget.idx}"] .well[data-r="${tr}"][data-c="${tc}"]`);
+    if(el) el.classList.add('move-target');
+  });
+}
+function endMoveDrag(){
+  if(!moveDrag||!hoverTarget){ moveDrag=null;hoverTarget=null;document.querySelectorAll('.well.move-target').forEach(el=>el.classList.remove('move-target'));return; }
+  if(!moveDrag.moved){
+    // No actual drag distance — treat as a stationary click. Don't move
+    // anything, so a subsequent dblclick on the same well can still open
+    // the editor (clear / edit) normally.
+    moveDrag=null;hoverTarget=null;
+    return;
+  }
+  const{fromKind,fromIdx,cells}=moveDrag;
+  const{kind:toKind,idx:toIdx,r:anchorToR,c:anchorToC}=hoverTarget;
+  const fromGrid=getPlateGrid(fromKind,fromIdx);
+  const toGrid=getPlateGrid(toKind,toIdx);
+  const toRows=toKind==='vh'?6:8, toCols=toKind==='vh'?9:12;
+
+  // Validate all destination cells are in-bounds and not water before mutating anything
+  const moves=[];
+  for(const{r,c,cell,dr,dc} of cells){
+    const tr=anchorToR+dr,tc=anchorToC+dc;
+    if(tr<0||tr>=toRows||tc<0||tc>=toCols){ moveDrag=null;hoverTarget=null;document.querySelectorAll('.well.move-target').forEach(el=>el.classList.remove('move-target'));return; } // out of bounds — abort whole move
+    moves.push({fromR:r,fromC:c,toR:tr,toC:tc,cell});
+  }
+  const noop=moves.every(m=>fromKind===toKind&&fromIdx===toIdx&&m.fromR===m.toR&&m.fromC===m.toC);
+  if(!noop){
+    // skip moves whose destination is a water well (leave those cells in place)
+    const blocked=moves.filter(m=>{
+      const dest=toGrid[m.toR][m.toC];
+      return dest&&dest.stype==='water';
+    });
+    const applied=moves.filter(m=>!blocked.includes(m));
+    if(applied.length>0){
+      pushUndo();
+      // capture source cells first (in case from/to overlap on same grid)
+      const captured=applied.map(m=>({...m,cellCopy:m.cell}));
+      // clear all source cells first
+      captured.forEach(m=>{ if(fromGrid[m.fromR]) fromGrid[m.fromR][m.fromC]=null; });
+      // then write to destinations
+      captured.forEach(m=>{ if(toGrid[m.toR]) toGrid[m.toR][m.toC]=m.cellCopy; });
+    }
+  }
+  // clear the selection on the source plate since the block has moved
+  selections[selKey(fromKind,fromIdx)]=new Set();
+  moveDrag=null;hoverTarget=null;
+  document.querySelectorAll('.well.move-target').forEach(el=>el.classList.remove('move-target'));
+  refreshCurrentView();
+}
+function toggleMoveMode(){
+  moveMode=!moveMode;
+  clearAllSelections();
+  refreshCurrentView();
+}
+function applyDragRect(){
+  if(!dragState) return;
+  const{kind,idx,startR,startC,curR,curC}=dragState;
+  const sel=getSel(kind,idx);
+  if(!dragState.additive) sel.clear();
+  const r0=Math.min(startR,curR),r1=Math.max(startR,curR);
+  const c0=Math.min(startC,curC),c1=Math.max(startC,curC);
+  for(let r=r0;r<=r1;r++) for(let c=c0;c<=c1;c++) sel.add(r+','+c);
+}
+function endDrag(){dragState=null;}
+
+function getPlateGrid(kind,idx){
+  if(kind==='dw') return dwPlates[idx].grid;
+  if(kind==='cp') return cpPlates[idx].grid;
+  if(kind==='lp') return lcmsPlates[idx].grid;
+  if(kind==='vh') return vialHolder;
+  return null;
+}
+function getPlateArray(kind){
+  if(kind==='dw') return dwPlates;
+  if(kind==='cp') return cpPlates;
+  if(kind==='lp') return lcmsPlates;
+  return [];
+}
+
+/* Simpler & more robust refresh: re-render the entire view section we're in */
+function refreshCurrentView(){
+  const activeNav=document.querySelector('.nav-item.active');
+  if(!activeNav) return;
+  const id=activeNav.id.replace('nav-','');
+  renderMain(id,true);
+}
+
+/* =====================================================================
+   TOOLBAR — shows selection count + palette to apply
+   ===================================================================== */
+function totalSelected(){
+  let n=0; for(const k in selections) n+=selections[k].size; return n;
+}
+function activeSelectionInfo(excludeVh){
+  for(const k in selections){
+    if(selections[k].size>0){
+      const[kind,idx]=k.split(':');
+      if(excludeVh&&kind==='vh') continue;
+      return{kind,idx:parseInt(idx),count:selections[k].size};
+    }
+  }
+  return null;
+}
+function updateToolbar(){
+  const tb=document.getElementById('editor-toolbar');
+  if(tb){
+    const info=activeSelectionInfo(true);
+    document.getElementById('et-count').textContent=info?info.count+' selected':'0 selected';
+    tb.style.opacity=info?'1':'0.5';
+  }
+  const tbVh=document.getElementById('editor-toolbar-vh');
+  if(tbVh){
+    const selVh=selections[selKey('vh',0)];
+    const n=selVh?selVh.size:0;
+    document.getElementById('et-count-vh').textContent=n+' selected';
+    tbVh.style.opacity=n>0?'1':'0.5';
+  }
+}
+
+function renderVHToolbar(){
+  const cpdOpts=compounds.filter(x=>x.type==='test').map(c=>c.abbr);
+  let palette=`<span class="et-chip" style="background:#e5e7eb;border-color:#d1d5db" onclick="applyToVH({type:'blank'})">blank</span>`;
+  palette+=`<span class="et-chip" style="background:#d1fae5;border-color:#a7f3d0" onclick="applyToVH({type:'qc'})">QC</span>`;
+  palette+=`<span class="et-chip" style="background:#1e1e1e;color:#fff" onclick="applyToVH({type:'shutdown'})">shutdown</span>`;
+  cpdOpts.forEach(c=>palette+=`<span class="et-chip compound" onclick="applyToVHCal('${c}')">${c} cal</span>`);
+  return `<div class="editor-toolbar" id="editor-toolbar-vh" style="opacity:.5;margin-bottom:14px">
+    <div class="et-row">
+      ${undoRedoButtons()}
+      <div class="et-sep"></div>
+      <button class="btn btn-sm ${moveMode?'btn-p':''}" onclick="toggleMoveMode()">${moveMode?'✓ Move mode ON':'⇄ Move mode'}</button>
+      <button class="btn btn-sm" style="background:#fef2f2;border-color:#fca5a5;color:#b91c1c;font-weight:600" onclick="applyToVH(null)">🗑 Clear selected vials</button>
+      <div class="et-sep"></div>
+      <span class="et-label">Vial selection</span>
+      <span class="et-sel-count" id="et-count-vh">0 selected</span>
+      <div class="et-sep"></div>
+      <span class="et-label">Apply</span>
+      <div class="et-palette">${palette}</div>
+    </div>
+    <div class="et-hint">${moveMode?"Move mode: drag a vial's content to another vial or plate well to relocate it.":"Drag to select vials, click a row/col header for a whole row/col, then click a chip. Double-click a vial to set compound+concentration for calibration. Ctrl+C / Ctrl+V copies and pastes vial contents too."}</div>
+  </div>`;
+}
+function applyToVHCal(cpd){
+  const conc=prompt('Concentration for '+cpd+' (e.g. 100):','100');
+  if(conc===null) return;
+  applyToVH({type:'cal',cpd,conc});
+}
+
+function renderToolbar(kind){
+  let palette='';
+  donors.forEach(d=>palette+=`<span class="et-chip donor" onclick="applyToSelection('${kind}',{stype:'sample',donor:'${d}'})">D${d}</span>`);
+  if(S.hasPBS) palette+=`<span class="et-chip donor" onclick="applyToSelection('${kind}',{stype:'pbs',donor:'PBS'})">PBS</span>`;
+  compounds.forEach(c=>palette+=`<span class="et-chip compound" onclick="applyToSelection('${kind}',{cpd:'${c.abbr}'})">${c.abbr}</span>`);
+  if(S.hasDmsoCtrl) palette+=`<span class="et-chip compound" onclick="applyToSelection('${kind}',{stype:'dmso',cpd:'DMSO'})">DMSO</span>`;
+  timepoints.forEach(t=>palette+=`<span class="et-chip tp" onclick="applyToSelection('${kind}',{tp:'${t}'})">${t}h</span>`);
+  palette+=`<span class="et-chip water" onclick="applyToSelection('${kind}',{stype:'water'})">H₂O</span>`;
+  for(let rep=1;rep<=3;rep++) palette+=`<span class="et-chip" onclick="applyToSelection('${kind}',{rep:${rep}})">rep ${rep}</span>`;
+
+  return `<div class="editor-toolbar" id="editor-toolbar" style="opacity:.5">
+    <div class="et-row">
+      ${undoRedoButtons()}
+      <div class="et-sep"></div>
+      <button class="btn btn-sm ${moveMode?'btn-p':''}" onclick="toggleMoveMode()">${moveMode?'✓ Move mode ON':'⇄ Move mode'}</button>
+      <button class="btn btn-sm" style="background:#fef2f2;border-color:#fca5a5;color:#b91c1c;font-weight:600" onclick="applyToSelection('${kind}',null)">🗑 Clear selected wells</button>
+      <div class="et-sep"></div>
+      <span class="et-label">Selection</span>
+      <span class="et-sel-count" id="et-count">0 selected</span>
+      <div class="et-sep"></div>
+      <span class="et-label">Apply</span>
+      <div class="et-palette">${palette}</div>
+    </div>
+    <div class="et-hint">${moveMode?"Move mode: drag a well's content to another well (even on a different plate) to relocate it. If multiple wells are selected, grab any one to drag the whole block together — origin clears, destination is overwritten.":"Click+drag wells to select a rectangle (or Shift+drag to add to the selection), then click a palette chip to apply it to every selected well. Click 🗑 Clear selected wells (or press Delete/Backspace) to empty them. Double-click a single well to edit or clear just that one. Ctrl+C / Ctrl+V copies a block and pastes it anchored at the last-clicked well (any plate), without clearing the original."}</div>
+  </div>`;
+}
+
+function applyToSelection(kind,patch){
+  const info=activeSelectionInfo(true);
+  if(!info||info.kind!==kind||info.count===0) return;
+  pushUndo();
+  const sel=selections[selKey(kind,info.idx)];
+  const grid=getPlateGrid(kind,info.idx);
+  sel.forEach(key=>{
+    const[r,c]=key.split(',').map(Number);
+    if(patch===null){ grid[r][c]=null; return; }
+    let cell=grid[r][c];
+    if(!cell||patch.stype){
+      // new cell or stype change — start fresh but try to keep useful fields
+      cell={stype:patch.stype||'sample',donor:cell?.donor,cpd:cell?.cpd,rep:cell?.rep||1,tp:cell?.tp??null};
+    }
+    Object.assign(cell,patch);
+    if(!cell.donor&&cell.stype==='sample') cell.donor=donors[0]||'1';
+    if(!cell.cpd&&(cell.stype==='sample'||cell.stype==='dmso')) cell.cpd=compounds[0]?.abbr||'cpd';
+    if(!cell.rep) cell.rep=1;
+    relabel(cell);
+    grid[r][c]=cell;
+  });
+  refreshCurrentView();
+  // Live sync: if editing LCMS plate, submission table updates automatically on next render of sub view (computed live)
+}
+
+/* =====================================================================
+   CELL EDIT POPOVER (double-click single well)
+   ===================================================================== */
+function openCellEditor(e,kind,idx,r,c){
+  e.stopPropagation();
+  document.querySelectorAll('.well-pop').forEach(p=>p.remove());
+  const grid=getPlateGrid(kind,idx);
+  const cell=grid[r][c];
+  const pop=document.createElement('div');
+  pop.className='well-pop';
+  pop.style.left=(e.pageX+8)+'px';
+  pop.style.top=(e.pageY+8)+'px';
+  const donorOpts=donors.map(d=>`<option value="${d}" ${cell?.donor===d?'selected':''}>${d}</option>`).join('')+(S.hasPBS?`<option value="PBS" ${cell?.donor==='PBS'?'selected':''}>PBS</option>`:'');
+  const cpdOpts=compounds.map(cc=>`<option value="${cc.abbr}" ${cell?.cpd===cc.abbr?'selected':''}>${cc.abbr}</option>`).join('')+(S.hasDmsoCtrl?`<option value="DMSO" ${cell?.cpd==='DMSO'?'selected':''}>DMSO</option>`:'');
+  const tpOpts=timepoints.map(t=>`<option value="${t}" ${cell?.tp===t?'selected':''}>${t}h</option>`).join('');
+  pop.innerHTML=`
+    <div class="wp-row"><select id="wp-donor"><option value="">— empty —</option>${donorOpts}</select></div>
+    <div class="wp-row"><select id="wp-cpd"><option value="">—</option>${cpdOpts}</select></div>
+    <div class="wp-row"><select id="wp-tp"><option value="">—</option>${tpOpts}</select></div>
+    <div class="wp-row"><input type="number" id="wp-rep" placeholder="rep" value="${cell?.rep||''}" style="width:70px"></div>
+    <div class="wp-row">
+      <button class="btn btn-sm" onclick="saveCellEdit('${kind}',${idx},${r},${c})">Save</button>
+      <button class="btn btn-sm" onclick="clearCell('${kind}',${idx},${r},${c})">Clear well</button>
+      <button class="btn btn-sm" onclick="this.closest('.well-pop').remove()">×</button>
+    </div>`;
+  document.body.appendChild(pop);
+  setTimeout(()=>{document.addEventListener('click',function h(ev){if(!pop.contains(ev.target)){pop.remove();document.removeEventListener('click',h);}});},10);
+}
+function saveCellEdit(kind,idx,r,c){
+  pushUndo();
+  const grid=getPlateGrid(kind,idx);
+  const donorV=document.getElementById('wp-donor').value;
+  const cpdV=document.getElementById('wp-cpd').value;
+  const tpEl=document.getElementById('wp-tp');
+  const tpV=tpEl?tpEl.value:null;
+  const repV=parseInt(document.getElementById('wp-rep').value)||1;
+  if(!donorV&&!cpdV){ grid[r][c]=null; }
+  else{
+    const stype=donorV==='PBS'?'pbs':(cpdV==='DMSO'?'dmso':'sample');
+    const cell={stype,donor:donorV||null,cpd:cpdV||null,rep:repV,tp:tpV||null};
+    relabel(cell);
+    grid[r][c]=cell;
+  }
+  document.querySelectorAll('.well-pop').forEach(p=>p.remove());
+  refreshCurrentView();
+}
+function clearCell(kind,idx,r,c){
+  pushUndo();
+  const grid=getPlateGrid(kind,idx);
+  grid[r][c]=null;
+  document.querySelectorAll('.well-pop').forEach(p=>p.remove());
+  refreshCurrentView();
+}
+
+/* =====================================================================
+   DEEPWELL VIEW
+   ===================================================================== */
+function renderDwView(){
+  let h=renderToolbar('dw');
+  h+=makeLeg(true);
+  h+=`<div class="plate-add-row"><button class="btn btn-sm" onclick="addPlate('dw')">+ add deepwell plate</button></div>`;
+  dwPlates.forEach((p,i)=>{
+    h+=`<div class="psec"><div class="phr"><span class="pn">Deepwell plate ${i+1}</span>
+      <button class="btn btn-sm" onclick="removePlate('dw',${i})" style="margin-left:auto">remove</button></div>
+      ${renderEditableGrid('dw',i,p.grid)}</div>`;
+  });
+  h+=`<div class="note"><strong>Pipetting:</strong> Add compound per column (multichannel ↓). Add fecal slurry/PBS per row-group (3 rows at once, multichannel →). Edit any well directly — drag to select, then click a palette chip, or double-click a single well.</div>`;
+  h+=renderDwCalculator();
+  h+=renderExposureCalculator();
+  document.getElementById('main').innerHTML=h;
+  wireDwCalc();
+  wireExposureCalc();
+}
+
+/* =====================================================================
+   EXPOSURE MIX CALCULATOR
+   Each well's 250µL exposure mix = DMSO (compound stock) + PBS + (sample
+   is already in the well from media/FS — this is just the drug-delivery
+   aliquot). Total DMSO in the FULL 2000µL well must stay < 0.2%.
+   Workflow: dilute the DMSO stock with PBS to hit the target well
+   concentration, then top up to 250µL with PBS. Vehicle/DMSO control
+   wells get the SAME DMSO volume (no compound) + PBS to 250µL.
+   ===================================================================== */
+function renderExposureCalculator(){
+  const testCpds=compounds.filter(c=>c.type==='test'||c.type==='nc'||c.type==='pc');
+  const rows=testCpds.map(c=>`
+    <tr>
+      <td style="font-family:var(--mono);font-size:11px">${c.abbr}</td>
+      <td style="font-size:10px;color:var(--t2)">${c.stockConc||10} ${c.stockUnit||'mM'}</td>
+      <td><input type="number" class="exp-target" data-cpd="${c.abbr}" data-stock="${c.stockConc||10}" data-unit="${c.stockUnit||'mM'}" placeholder="target conc" style="width:90px;height:28px;font-size:11px"></td>
+      <td><select class="exp-target-unit" data-cpd="${c.abbr}" style="width:70px;height:28px;font-size:11px"><option>µM</option><option>nM</option><option>mM</option></select></td>
+      <td class="exp-result" data-cpd="${c.abbr}" style="font-size:10px;color:var(--t2)">—</td>
+    </tr>`).join('');
+  return `<div class="card" id="exp-calc" style="margin-top:20px">
+    <h3>💧 Exposure mix calculator (DMSO + PBS + Drug, 250µL/well)</h3>
+    <div class="note" style="margin-bottom:10px">Dilutes each compound's DMSO stock with PBS to the target well concentration, then tops up to the exposure-mix volume with PBS. Final DMSO in the <strong>whole 2000µL well</strong> must stay under the safety limit — vehicle/DMSO control wells get the same DMSO volume (no compound) to keep the variable constant.</div>
+    <div class="g3">
+      <div class="field"><label>Exposure mix volume per well (µL)</label><input type="number" id="exp-mixvol" value="250"></div>
+      <div class="field"><label>Total well volume (µL)</label><input type="number" id="exp-wellvol" value="2000"></div>
+      <div class="field"><label>Max DMSO in well (%)</label><input type="number" id="exp-dmsomax" value="0.2" step="0.01"></div>
+    </div>
+    <div class="tw" style="margin-top:10px"><table>
+      <thead><tr><th>Compound</th><th>Stock</th><th>Target conc.</th><th>Unit</th><th>Result (per well)</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    <div class="note" style="margin-top:10px;margin-bottom:0" id="exp-dmso-summary">Enter target concentrations above to see DMSO volume and %DMSO-in-well for each compound.</div>
+  </div>`;
+}
+function wireExposureCalc(){
+  document.querySelectorAll('.exp-target,.exp-target-unit,#exp-mixvol,#exp-wellvol,#exp-dmsomax').forEach(el=>{
+    el.addEventListener('input',computeExposureCalc);
+  });
+}
+const UNIT_TO_M={mM:1e-3,'µM':1e-6,nM:1e-9}; // convert to mol/L multiplier (relative)
+function computeExposureCalc(){
+  const mixVol=parseFloat(document.getElementById('exp-mixvol').value)||250;
+  const wellVol=parseFloat(document.getElementById('exp-wellvol').value)||2000;
+  const dmsoMaxPct=parseFloat(document.getElementById('exp-dmsomax').value)||0.2;
+  const dmsoMaxVolUL=wellVol*(dmsoMaxPct/100);
+
+  let worstPct=0,worstCpd='';
+  document.querySelectorAll('.exp-target').forEach(input=>{
+    const cpd=input.dataset.cpd;
+    const stock=parseFloat(input.dataset.stock)||10;
+    const stockUnit=input.dataset.unit||'mM';
+    const targetVal=parseFloat(input.value);
+    const unitSel=document.querySelector(`.exp-target-unit[data-cpd="${cpd}"]`);
+    const targetUnit=unitSel?unitSel.value:'µM';
+    const resultCell=document.querySelector(`.exp-result[data-cpd="${cpd}"]`);
+    if(!targetVal||targetVal<=0){ if(resultCell) resultCell.innerHTML='—'; return; }
+
+    // Convert stock and target to the same unit basis (relative molarity factor)
+    const stockInTargetUnits=stock*(UNIT_TO_M[stockUnit]/UNIT_TO_M[targetUnit]);
+    // C1V1=C2V2: V1(DMSO stock, µL) = target*wellVol_or_mixVol / stockInTargetUnits
+    // Target concentration is defined in the FULL WELL (2000µL), so dilution to mix volume is computed against the final well volume
+    const dmsoVolUL=(targetVal*wellVol)/stockInTargetUnits;
+    const pbsVolUL=mixVol-dmsoVolUL;
+    const dmsoPctInWell=(dmsoVolUL/wellVol)*100;
+    const overLimit=dmsoVolUL>dmsoMaxVolUL;
+    if(overLimit&&dmsoPctInWell>worstPct){worstPct=dmsoPctInWell;worstCpd=cpd;}
+
+    if(resultCell){
+      resultCell.innerHTML=pbsVolUL<0
+        ? `<span style="color:#dc2626">⚠ target too high — DMSO stock alone exceeds mix volume</span>`
+        : `DMSO stock: <strong>${dmsoVolUL.toFixed(2)} µL</strong> + PBS: <strong>${pbsVolUL.toFixed(2)} µL</strong>
+           ${overLimit?`<br><span style="color:#dc2626">⚠ DMSO = ${dmsoPctInWell.toFixed(3)}% of well — exceeds ${dmsoMaxPct}% limit</span>`
+                      :`<br><span style="color:#16a34a">✓ DMSO = ${dmsoPctInWell.toFixed(3)}% of well</span>`}`;
+    }
+  });
+
+  const summary=document.getElementById('exp-dmso-summary');
+  if(summary){
+    summary.innerHTML=worstPct>0
+      ? `⚠ <strong>${worstCpd}</strong> exceeds the DMSO safety limit at this target concentration (${worstPct.toFixed(3)}% > ${dmsoMaxPct}%). Lower the target concentration or use a more concentrated stock. Max allowed DMSO volume per well: ${dmsoMaxVolUL.toFixed(2)} µL.`
+      : `✓ All entered target concentrations stay within the ${dmsoMaxPct}% DMSO limit (max ${dmsoMaxVolUL.toFixed(2)} µL DMSO per well). Vehicle/DMSO control wells should receive the same DMSO volume as the matching compound, topped to ${document.getElementById('exp-mixvol').value}µL with PBS (no drug).`;
+  }
+}
+
+/* Count well types across all deepwell plates:
+   - sample: donor row + a real compound column -> media + (DMSO+PBS+Drug) + fecal slurry
+   - dmso (donor row): donor row + DMSO ctrl column -> media + (DMSO+PBS) + fecal slurry
+   - pbs (PBS row + compound column): media + (DMSO+PBS+Drug) + PBS (no FS)
+   - dmso (PBS row + DMSO ctrl column): media + (DMSO+PBS) + PBS (no FS)
+   - water: border wells -> water only
+*/
+function countDwWellTypes(){
+  const counts={sampleFS:0,dmsoFS:0,samplePBS:0,dmsoPBS:0,water:0};
+  dwPlates.forEach(p=>{
+    for(let r=0;r<8;r++) for(let c=0;c<12;c++){
+      const cell=p.grid[r][c];
+      if(!cell) continue;
+      if(cell.stype==='water'){counts.water++;continue;}
+      const isPbsRow=cell.donor==='PBS';
+      if(cell.stype==='dmso'){ isPbsRow?counts.dmsoPBS++:counts.dmsoFS++; }
+      else if(cell.stype==='pbs'){ counts.samplePBS++; } // pbs stype = PBS row + real compound col
+      else if(cell.stype==='sample'){ counts.sampleFS++; }
+    }
+  });
+  return counts;
+}
+
+function renderDwCalculator(){
+  const c=countDwWellTypes();
+  const totalNonWater=c.sampleFS+c.dmsoFS+c.samplePBS+c.dmsoPBS;
+  return `<div class="card" id="dw-calc" style="margin-top:20px">
+    <h3>🧪 Deepwell reagent calculator</h3>
+    <div class="note" style="margin-bottom:10px">Based on the recipe: each well = media + exposure mix (DMSO+PBS+Drug, 250µL) + fecal slurry or PBS (400µL) = 2000µL total; border (water) wells = 2000µL water only.</div>
+    <div class="sg" style="grid-template-columns:repeat(5,1fr);margin-bottom:14px">
+      <div class="st"><div class="v">${c.sampleFS}</div><div class="l">sample + FS wells</div></div>
+      <div class="st"><div class="v">${c.dmsoFS}</div><div class="l">DMSO ctrl + FS wells</div></div>
+      <div class="st"><div class="v">${c.samplePBS}</div><div class="l">sample + PBS (no FS)</div></div>
+      <div class="st"><div class="v">${c.dmsoPBS}</div><div class="l">DMSO ctrl + PBS (no FS)</div></div>
+      <div class="st"><div class="v">${c.water}</div><div class="l">water (border) wells</div></div>
+    </div>
+    <div class="g4">
+      <div class="field"><label>Media (BYCFA+6cMuc) per well (µL)</label><input type="number" id="dwc-media" value="1350"></div>
+      <div class="field"><label>Exposure mix per well (µL)</label><input type="number" id="dwc-mix" value="250"></div>
+      <div class="field"><label>Fecal slurry / PBS per well (µL)</label><input type="number" id="dwc-fs" value="400"></div>
+      <div class="field"><label>Overage (%)</label><input type="number" id="dwc-overage" value="10" min="0" max="100"></div>
+    </div>
+    <div id="dwc-result" class="sg" style="margin-top:10px;grid-template-columns:repeat(4,1fr)"></div>
+  </div>`;
+}
+function wireDwCalc(){
+  ['dwc-media','dwc-mix','dwc-fs','dwc-overage'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.addEventListener('input',computeDwCalc);
+  });
+  computeDwCalc();
+}
+function computeDwCalc(){
+  const c=countDwWellTypes();
+  const media=parseFloat(document.getElementById('dwc-media').value)||0;
+  const mix=parseFloat(document.getElementById('dwc-mix').value)||0;
+  const fs=parseFloat(document.getElementById('dwc-fs').value)||0;
+  const overage=1+(parseFloat(document.getElementById('dwc-overage').value)||0)/100;
+
+  const nonWaterWells=c.sampleFS+c.dmsoFS+c.samplePBS+c.dmsoPBS;
+  const fsWells=c.sampleFS+c.dmsoFS; // wells getting fecal slurry
+  const pbsForExposureWells=c.samplePBS+c.dmsoPBS; // wells getting PBS instead of FS
+
+  const totalMedia=nonWaterWells*media*overage;
+  const totalMix=nonWaterWells*mix*overage; // exposure mix volume (DMSO+PBS+Drug combined) — composition handled in exposure calculator
+  const totalFS=fsWells*fs*overage;
+  const totalPBSasFS=pbsForExposureWells*fs*overage;
+  const totalWater=c.water*2000*overage;
+
+  document.getElementById('dwc-result').innerHTML=`
+    <div class="st"><div class="v">${(totalMedia/1000).toFixed(2)} mL</div><div class="l">media (BYCFA+6cMuc) total</div></div>
+    <div class="st"><div class="v">${(totalMix/1000).toFixed(2)} mL</div><div class="l">exposure mix total (see exposure calc for DMSO/PBS/Drug split)</div></div>
+    <div class="st"><div class="v">${(totalFS/1000).toFixed(2)} mL</div><div class="l">fecal slurry total</div></div>
+    <div class="st"><div class="v">${(totalPBSasFS/1000).toFixed(2)} mL</div><div class="l">PBS (replacing FS) total</div></div>
+    <div class="st" style="grid-column:span 2"><div class="v">${(totalWater/1000).toFixed(2)} mL</div><div class="l">water for border wells</div></div>
+  `;
+}
+
+/* =====================================================================
+   COLLECT VIEW
+   ===================================================================== */
+function renderCpView(){
+  let h=renderToolbar('cp');
+  h+=makeLeg(false);
+  h+=`<div class="plate-add-row"><button class="btn btn-sm" onclick="addPlate('cp')">+ add collect plate</button></div>`;
+  for(let i=0;i<cpPlates.length;i+=2){
+    const pA=cpPlates[i],pB=cpPlates[i+1];
+    h+=`<div style="margin-bottom:20px">
+      <div class="note" style="margin-bottom:8px">⚖ Centrifuge pair ${Math.floor(i/2)+1}</div>
+      <div class="ppair">
+        <div><div class="phr"><span class="pn">${pA.isBalance?'Balance plate':'Collect plate '+(i+1)+(pA.tp!=null?' ('+pA.tp+'h)':'')}</span>
+          <button class="btn btn-sm" onclick="removePlate('cp',${i})" style="margin-left:auto">remove</button></div>
+          ${pA.isBalance?'<div style="padding:20px;text-align:center;color:var(--t3);font-size:12px;border:1px dashed var(--bd);border-radius:var(--r)">Empty balance plate</div>':renderEditableGrid('cp',i,pA.grid)}
+        </div>
+        ${pB?`<div><div class="phr"><span class="pn">${pB.isBalance?'Balance plate':'Collect plate '+(i+2)+(pB.tp!=null?' ('+pB.tp+'h)':'')}</span>
+          <button class="btn btn-sm" onclick="removePlate('cp',${i+1})" style="margin-left:auto">remove</button></div>
+          ${pB.isBalance?'<div style="padding:20px;text-align:center;color:var(--t3);font-size:12px;border:1px dashed var(--bd);border-radius:var(--r)">Empty balance plate</div>':renderEditableGrid('cp',i+1,pB.grid)}
+        </div>`:''}
+      </div></div>`;
+  }
+  h+=`<div class="note">Edits here do NOT automatically push to the LCMS plate. Use "Repack LCMS from collect plates" to regenerate, or edit the LCMS plate directly.</div>
+  <button class="btn btn-p" onclick="buildLcmsFromCollect();go('lp')">↻ Repack LCMS plate from collect plates</button>`;
+  h+=renderMethanolCalculator();
+  document.getElementById('main').innerHTML=h;
+  wireMethanolCalc();
+}
+
+function countOccupiedCollectWells(){
+  let n=0;
+  cpPlates.forEach(p=>{
+    if(p.isBalance) return;
+    for(let r=0;r<8;r++) for(let c=0;c<12;c++){
+      const cell=p.grid[r][c];
+      if(cell&&cell.stype!=='water') n++;
+    }
+  });
+  return n;
+}
+
+function renderMethanolCalculator(){
+  const n=countOccupiedCollectWells();
+  return `<div class="card" id="meoh-calc" style="margin-top:20px">
+    <h3>🧪 Methanol + internal standard calculator</h3>
+    <div class="note" style="margin-bottom:10px">Quenching/extraction solvent for collect plate samples — ${n} occupied well${n!==1?'s':''} across all collect plates (excluding water/balance wells), at a fixed volume per well.</div>
+    <div class="g4">
+      <div class="field"><label>Occupied wells</label><input type="number" id="mc-wells" value="${n}" min="0"></div>
+      <div class="field"><label>Volume per well (µL)</label><input type="number" id="mc-vol" value="180" min="1"></div>
+      <div class="field"><label>Overage / dead volume (%)</label><input type="number" id="mc-overage" value="10" min="0" max="100"></div>
+      <div class="field"><label>IS stock concentration</label><input type="text" id="mc-is-stock" value="1" placeholder="e.g. 1 mg/mL"></div>
+    </div>
+    <div class="g3">
+      <div class="field"><label>IS working concentration in MeOH</label><input type="text" id="mc-is-work" value="0.01" placeholder="e.g. 0.01 mg/mL"></div>
+      <div class="field"><label>IS stock unit</label><input type="text" id="mc-is-unit" value="mg/mL"></div>
+      <div></div>
+    </div>
+    <div id="mc-result" class="sg" style="margin-top:10px;grid-template-columns:1fr 1fr 1fr"></div>
+  </div>`;
+}
+
+function wireMethanolCalc(){
+  const ids=['mc-wells','mc-vol','mc-overage','mc-is-stock','mc-is-work'];
+  ids.forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.addEventListener('input',computeMeohCalc);
+  });
+  computeMeohCalc();
+}
+function computeMeohCalc(){
+  const wells=parseFloat(document.getElementById('mc-wells').value)||0;
+  const volPerWell=parseFloat(document.getElementById('mc-vol').value)||0;
+  const overagePct=parseFloat(document.getElementById('mc-overage').value)||0;
+  const isStock=parseFloat(document.getElementById('mc-is-stock').value)||0;
+  const isWork=parseFloat(document.getElementById('mc-is-work').value)||0;
+  const isUnit=document.getElementById('mc-is-unit').value||'';
+
+  const baseVolUL=wells*volPerWell;
+  const totalVolUL=baseVolUL*(1+overagePct/100);
+  const totalVolML=totalVolUL/1000;
+
+  let isVolHTML='<div class="st"><div class="v">—</div><div class="l">IS stock volume needed</div></div>';
+  if(isStock>0&&isWork>0){
+    // C1V1 = C2V2 -> V1 = C2*V2/C1, V2 = totalVolUL (the final MeOH+IS volume)
+    const isVolUL=(isWork*totalVolUL)/isStock;
+    isVolHTML=`<div class="st"><div class="v">${isVolUL.toFixed(1)} µL</div><div class="l">IS stock (${isStock} ${isUnit}) to add</div></div>`;
+  }
+
+  document.getElementById('mc-result').innerHTML=`
+    <div class="st"><div class="v">${baseVolUL.toFixed(0)} µL</div><div class="l">base volume (wells × µL/well)</div></div>
+    <div class="st"><div class="v">${totalVolUL.toFixed(0)} µL<br><span style="font-size:11px;color:var(--t3)">(${totalVolML.toFixed(2)} mL)</span></div><div class="l">total with ${document.getElementById('mc-overage').value}% overage</div></div>
+    ${isVolHTML}
+    <div class="st"><div class="v">${(totalVolUL-( (isStock>0&&isWork>0)?(isWork*totalVolUL)/isStock:0 )).toFixed(1)} µL</div><div class="l">pure MeOH volume (total − IS stock)</div></div>
+  `;
+}
+
+/* =====================================================================
+   LCMS VIEW
+   ===================================================================== */
+function renderLpView(){
+  let h=renderToolbar('lp');
+  h+=`<div class="note">Autosampler has 4 physical slots (R/B/Y/G). Vial holder occupies slot <strong>${S.vhColor}</strong> — LCMS plates rotate through the remaining ${availableLcmsColors().length} slots: ${availableLcmsColors().join(', ')}.</div>`;
+  h+=`<div class="psec"><div class="phr"><span class="pn">Vial holder (${S.vhColor}:)</span>
+    <span style="font-size:11px;color:var(--t3)">6 rows A–F × 9 cols 1–9</span></div>
+    ${renderVHToolbar()}
+    ${renderVH()}
+    <div class="leg" style="margin-top:8px">
+      <div class="li"><div class="ld" style="background:#e5e7eb"></div>blank (${S.blankPos})</div>
+      <div class="li"><div class="ld" style="background:#d1fae5"></div>QC (${S.qcPos})</div>
+      ${S.calLoc==='vial'?'<div class="li"><div class="ld" style="background:#fef3c7"></div>cal vials</div>':''}
+      <div class="li"><div class="ld" style="background:#1e1e1e"></div>shutdown</div>
+    </div></div>`;
+  h+=makeLeg(false);
+  h+=`<div class="plate-add-row"><button class="btn btn-sm" onclick="addPlate('lp')">+ add LCMS plate</button></div>`;
+  lcmsPlates.forEach((lp,pi)=>{
+    h+=`<div class="psec"><div class="phr">
+      <span class="pn">LCMS plate ${pi+1}</span>
+      <span class="pcb" style="background:${PB[lp.color]}">[${lp.color}]</span>
+      <button class="btn btn-sm" onclick="removePlate('lp',${pi})" style="margin-left:auto">remove</button>
+    </div>${renderEditableGrid('lp',pi,lp.grid)}</div>`;
+  });
+  h+=`<div class="note"><strong>Live link:</strong> any edit here updates the Submission file instantly — switch to step 5 to see it. <span class="live-badge"><span class="live-dot"></span>live</span></div>`;
+  h+=renderCalLineCalculator();
+  document.getElementById('main').innerHTML=h;
+  wireCalLineCalc();
+}
+
+/* =====================================================================
+   CALIBRATION LINE CALCULATOR
+   Standalone — not tied to well volumes. For each test compound, serial-
+   dilutes the DMSO stock down to each calibration concentration at a
+   chosen final volume per cal point.
+   ===================================================================== */
+function renderCalLineCalculator(){
+  const testCpds=compounds.filter(c=>c.type==='test');
+  const cpdOpts=testCpds.map(c=>`<option value="${c.abbr}">${c.abbr} (${c.stockConc||10} ${c.stockUnit||'mM'})</option>`).join('');
+  return `<div class="card" id="cal-calc" style="margin-top:20px">
+    <h3>📏 Calibration line preparation calculator — serial dilution</h3>
+    <div class="note" style="margin-bottom:10px">Independent of well volumes. Starts from the DMSO stock at the <strong>highest</strong> calibration concentration, then each lower point is diluted from the previous point's prepared solution (true serial dilution chain) rather than back-calculated from stock each time.</div>
+    <div class="g3">
+      <div class="field"><label>Compound</label><select id="cal-calc-cpd">${cpdOpts}</select></div>
+      <div class="field"><label>Final volume per cal point (µL)</label><input type="number" id="cal-calc-vol" value="500"></div>
+      <div class="field"><label>Cal point unit</label><select id="cal-calc-unit"><option>nM</option><option>µM</option><option>mM</option></select></div>
+    </div>
+    <div class="tw" style="margin-top:10px"><table>
+      <thead><tr><th>Step</th><th>Target conc.</th><th>Diluted from</th><th>Source volume</th><th>Diluent (PBS) volume</th><th>Dilution factor</th><th>Notes</th></tr></thead>
+      <tbody id="cal-calc-rows"></tbody>
+    </table></div>
+  </div>`;
+}
+function wireCalLineCalc(){
+  ['cal-calc-cpd','cal-calc-vol','cal-calc-unit'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.addEventListener('input',computeCalLineCalc);
+    if(el) el.addEventListener('change',computeCalLineCalc);
+  });
+  computeCalLineCalc();
+}
+function computeCalLineCalc(){
+  const cpdAbbr=document.getElementById('cal-calc-cpd')?.value;
+  const cpd=compounds.find(c=>c.abbr===cpdAbbr);
+  const finalVol=parseFloat(document.getElementById('cal-calc-vol').value)||500;
+  const calUnit=document.getElementById('cal-calc-unit').value||'nM';
+  const rowsEl=document.getElementById('cal-calc-rows');
+  if(!rowsEl) return;
+  if(!cpd||!S.calConcs||S.calConcs.length===0){
+    rowsEl.innerHTML=`<tr><td colspan="7" style="color:var(--t3)">No compound or calibration concentrations set.</td></tr>`;
+    return;
+  }
+  const stock=cpd.stockConc||10, stockUnit=cpd.stockUnit||'mM';
+  const stockInCalUnits=stock*(UNIT_TO_M[stockUnit]/UNIT_TO_M[calUnit]);
+
+  // Sort concentrations descending — serial dilution always proceeds high -> low
+  const concs=S.calConcs.map(c=>parseFloat(c)).filter(c=>!isNaN(c)&&c>0).sort((a,b)=>b-a);
+  if(concs.length===0){
+    rowsEl.innerHTML=`<tr><td colspan="7" style="color:var(--t3)">Calibration concentrations are not numeric.</td></tr>`;
+    return;
+  }
+
+  let rows='';
+  let prevConc=null, prevSourceLabel=`${cpd.abbr} DMSO stock (${stock} ${stockUnit})`;
+  concs.forEach((conc,i)=>{
+    const sourceConc=i===0?stockInCalUnits:prevConc; // first point dilutes from stock; rest from previous point
+    const sourceVolUL=(conc*finalVol)/sourceConc;
+    const diluentVolUL=finalVol-sourceVolUL;
+    const dilutionFactor=sourceConc/conc;
+    const tooMuch=sourceVolUL>finalVol;
+    const subUL=sourceVolUL<2&&!tooMuch;
+    rows+=`<tr>
+      <td style="color:var(--t3)">${i+1}</td>
+      <td style="font-family:var(--mono)">${conc} ${calUnit}</td>
+      <td style="font-size:10px;color:var(--t2)">${i===0?prevSourceLabel:`Point ${i} (${concs[i-1]} ${calUnit})`}</td>
+      <td>${tooMuch?'<span style="color:#dc2626">exceeds final volume</span>':sourceVolUL.toFixed(2)+' µL'}</td>
+      <td>${tooMuch?'—':diluentVolUL.toFixed(2)+' µL'}</td>
+      <td style="font-family:var(--mono);font-size:10px">${dilutionFactor.toFixed(1)}×</td>
+      <td style="font-size:10px;color:var(--t3)">${subUL?'⚠ sub-2µL pipetting — consider a smaller dilution step':''}</td>
+    </tr>`;
+    prevConc=conc;
+  });
+  rowsEl.innerHTML=rows;
+}
+
+function renderVH(){
+  const sel=getSel('vh',0);
+  let h='<div class="pgw"><div class="pgvial" data-kind="vh" data-idx="0"><div class="xh"></div>';
+  for(let c=0;c<9;c++) h+=`<div class="xh" onclick="selectVHCol(${c})">${c+1}</div>`;
+  for(let r=0;r<6;r++){
+    h+=`<div class="rl" onclick="selectVHRow(${r})">${R6[r]}</div>`;
+    for(let c=0;c<9;c++){
+      const cell=vialHolder[r][c];
+      const isSel=sel.has(r+','+c);
+      let cls='w-e',txt='',tip='';
+      if(cell==='blank'){cls='w-bl';txt='blank';tip=S.blankPos;}
+      else if(cell==='qc'){cls='w-qc';txt='QC';tip=S.qcPos;}
+      else if(cell==='cal-reserved'){cls='w-cal';txt='cal';}
+      else if(cell&&cell.stype==='cal'){cls='w-cal';txt=`${cell.cpd}<br>${cell.conc}`;tip=cell.label;}
+      else if(cell&&cell.stype==='shutdown'){cls='w-sd';txt='shut-<br>down';}
+      h+=`<div class="well ${cls}${isSel?' selected':''}"
+            data-r="${r}" data-c="${c}"
+            onmousedown="startDrag(event,'vh',0,${r},${c})"
+            onmouseenter="dragOver(event,'vh',0,${r},${c})"
+            ondblclick="openVHEditor(event,${r},${c})"
+            ontouchstart="wellTouchStart(event,'vh',0,${r},${c})"
+          ><span class="wt">${tip}</span>${txt}</div>`;
+    }
+  }
+  return h+'</div></div>';
+}
+
+function selectVHRow(r){
+  const sel=getSel('vh',0);
+  const allSel=Array.from({length:9},(_,c)=>sel.has(r+','+c)).every(Boolean);
+  for(let c=0;c<9;c++){ if(allSel) sel.delete(r+','+c); else sel.add(r+','+c); }
+  syncAllSelectionDOM();updateToolbar();
+}
+function selectVHCol(c){
+  const sel=getSel('vh',0);
+  const allSel=Array.from({length:6},(_,r)=>sel.has(r+','+c)).every(Boolean);
+  for(let r=0;r<6;r++){ if(allSel) sel.delete(r+','+c); else sel.add(r+','+c); }
+  syncAllSelectionDOM();updateToolbar();
+}
+
+function openVHEditor(e,r,c){
+  e.stopPropagation();
+  document.querySelectorAll('.well-pop').forEach(p=>p.remove());
+  const cell=vialHolder[r][c];
+  const pop=document.createElement('div');
+  pop.className='well-pop';
+  pop.style.left=(e.pageX+8)+'px';
+  pop.style.top=(e.pageY+8)+'px';
+  const cpdOpts=compounds.filter(x=>x.type==='test').map(cc=>`<option value="${cc.abbr}" ${cell?.cpd===cc.abbr?'selected':''}>${cc.abbr}</option>`).join('');
+  pop.innerHTML=`
+    <div class="wp-row"><select id="vhp-type">
+      <option value="">— empty —</option>
+      <option value="blank" ${cell==='blank'?'selected':''}>blank</option>
+      <option value="qc" ${cell==='qc'?'selected':''}>QC</option>
+      <option value="cal" ${cell&&cell.stype==='cal'?'selected':''}>calibration</option>
+      <option value="shutdown" ${cell&&cell.stype==='shutdown'?'selected':''}>shutdown</option>
+    </select></div>
+    <div class="wp-row" id="vhp-cal-fields" style="display:${cell&&cell.stype==='cal'?'flex':'none'}">
+      <select id="vhp-cpd" style="width:90px">${cpdOpts}</select>
+      <input type="text" id="vhp-conc" placeholder="conc" value="${cell?.conc||''}" style="width:60px">
+    </div>
+    <div class="wp-row">
+      <button class="btn btn-sm" onclick="saveVHEdit(${r},${c})">Save</button>
+      <button class="btn btn-sm" onclick="this.closest('.well-pop').remove()">×</button>
+    </div>`;
+  document.body.appendChild(pop);
+  document.getElementById('vhp-type').addEventListener('change',function(){
+    document.getElementById('vhp-cal-fields').style.display=this.value==='cal'?'flex':'none';
+  });
+  setTimeout(()=>{document.addEventListener('click',function h(ev){if(!pop.contains(ev.target)){pop.remove();document.removeEventListener('click',h);}});},10);
+}
+function saveVHEdit(r,c){
+  pushUndo();
+  const type=document.getElementById('vhp-type').value;
+  if(!type){ vialHolder[r][c]=null; }
+  else if(type==='blank') vialHolder[r][c]='blank';
+  else if(type==='qc') vialHolder[r][c]='qc';
+  else if(type==='shutdown') vialHolder[r][c]={stype:'shutdown'};
+  else if(type==='cal'){
+    const cpd=document.getElementById('vhp-cpd').value;
+    const conc=document.getElementById('vhp-conc').value;
+    vialHolder[r][c]={stype:'cal',cpd,conc,label:`${cpd}_${conc}`};
+  }
+  document.querySelectorAll('.well-pop').forEach(p=>p.remove());
+  refreshCurrentView();
+}
+function applyToVH(patch){
+  const sel=getSel('vh',0);
+  if(sel.size===0) return;
+  pushUndo();
+  sel.forEach(key=>{
+    const[r,c]=key.split(',').map(Number);
+    if(patch===null){ vialHolder[r][c]=null; return; }
+    if(patch.type==='blank') vialHolder[r][c]='blank';
+    else if(patch.type==='qc') vialHolder[r][c]='qc';
+    else if(patch.type==='shutdown') vialHolder[r][c]={stype:'shutdown'};
+    else if(patch.type==='cal'){
+      const cpd=patch.cpd||compounds.find(x=>x.type==='test')?.abbr||'cpd';
+      vialHolder[r][c]={stype:'cal',cpd,conc:patch.conc||'100',label:`${cpd}_${patch.conc||'100'}`};
+    }
+  });
+  refreshCurrentView();
+}
+
+function makeLeg(withWater){
+  let h='<div class="leg">';
+  donors.forEach((d,i)=>h+=`<div class="li"><div class="ld" style="background:${DC[i%6]};border-color:${DCT[i%6]}60"></div>Donor ${d}</div>`);
+  if(S.hasPBS) h+=`<div class="li"><div class="ld" style="background:#e2e8f0"></div>PBS</div>`;
+  if(S.hasDmsoCtrl) h+=`<div class="li"><div class="ld" style="background:#fed7aa"></div>DMSO ctrl</div>`;
+  if(withWater) h+=`<div class="li"><div class="ld" style="background:#bfdbfe;border-color:#60a5fa"></div>water</div>`;
+  return h+'</div>';
+}
+
+/* =====================================================================
+   ADD / REMOVE PLATES
+   ===================================================================== */
+function addPlate(kind){
+  pushUndo();
+  if(kind==='dw') dwPlates.push({id:nextDwId++,grid:emptyGrid(),rowGroups:[],cols:[],label:'Deepwell plate'});
+  if(kind==='cp') cpPlates.push({id:nextCpId++,grid:emptyGrid(),rowGroups:[],cols:[],tp:timepoints[0]||null,label:'Collect plate'});
+  if(kind==='lp'){
+    lcmsPlates.push({id:nextLpId++,color:lcmsColorAt(lcmsPlates.length),grid:emptyGrid(),label:'LCMS plate'});
+  }
+  refreshCurrentView();
+}
+function removePlate(kind,idx){
+  const arr=getPlateArray(kind);
+  if(arr.length<=1){alert('At least one plate is required.');return;}
+  pushUndo();
+  arr.splice(idx,1);
+  delete selections[selKey(kind,idx)];
+  refreshCurrentView();
+}
+
+/* =====================================================================
+   SUBMISSION FILE — LIVE DERIVED FROM LCMS PLATE + VIAL HOLDER
+   ===================================================================== */
+function buildSubmissionSequence(){
+  const modes=[];
+  if(S.modePos) modes.push('pos');
+  if(S.modeNeg) modes.push('neg');
+
+  // Gather ordered samples directly from current LCMS plates (live!)
+  // Calibration-line wells are excluded from the submission file per requirement —
+  // they are prepared/run separately and not part of the sample injection sequence.
+  const orderedSamples=[];
+  lcmsPlates.forEach((lp,pi)=>{
+    for(let r=0;r<8;r++) for(let c=0;c<12;c++){
+      const cell=lp.grid[r][c];
+      if(cell&&cell.stype!=='water'&&cell.stype!=='empty'&&cell.stype!=='cal'){
+        orderedSamples.push({...cell,position:lp.color+':'+R8[r]+(c+1)});
+      }
+    }
+  });
+
+  const final=[];
+  let sCount=0,midBC=0,midQC=0;
+
+  // Pre-blanks: pos then neg adjacent for each pre-blank index
+  for(let i=1;i<=S.preBlanks;i++) for(const m of modes)
+    final.push({stype:'preblank',mode:m,label:`pre_blank_${m}_${i}`,isVial:true,position:S.blankPos});
+
+  for(const smp of orderedSamples){
+    const isSmp=['sample','dmso','pbs'].includes(smp.stype);
+    if(isSmp&&sCount>0&&sCount%S.qcInterval===0){
+      midBC++;
+      for(const m of modes)
+        final.push({stype:'blank-mid',mode:m,label:`blank_${m}_${midBC}`,isVial:true,position:S.blankPos});
+      midQC++;
+      for(const m of modes)
+        final.push({stype:'qc-mid',mode:m,label:`qc_${m}_${midQC}`,isVial:true,position:S.qcPos});
+    }
+    for(const m of modes)
+      final.push({...smp,mode:m,label:`${smp.label}_${m}`,position:smp.position});
+    if(isSmp) sCount++;
+  }
+
+  for(let i=1;i<=S.postBlanks;i++) for(const m of modes)
+    final.push({stype:'postblank',mode:m,label:`post_blank_${m}_${i}`,isVial:true,position:S.blankPos});
+
+  // Shutdown draws from the same blank vial (per requirement) rather than a fresh vial slot
+  if(S.hasShutdown){
+    final.push({stype:'shutdown',mode:'pos',label:'shutdown',isVial:true,position:S.blankPos});
+  }
+  return final;
+}
+
+/* Manual overrides for submission table — keyed by row index (stable as long as
+   the underlying LCMS layout doesn't change row count/order). Survives re-renders
+   triggered by LCMS edits; cleared only via explicit reset. */
+/* =====================================================================
+   UNDO / REDO — snapshot-based, covers plate edits, vial holder edits,
+   and submission overrides. Does NOT cover setup (donor/compound/tp lists).
+   ===================================================================== */
+/* =====================================================================
+   COPY / PASTE — Ctrl+C copies the current selection's cells (relative
+   to the selection's top-left corner); Ctrl+V pastes that shape anchored
+   at the last-clicked well, on any plate (including vial holder), without
+   clearing the source (unlike Move mode).
+   ===================================================================== */
+function doCopy(){
+  const info=activeSelectionInfo(true);
+  if(!info||info.count===0) return;
+  const sel=selections[selKey(info.kind,info.idx)];
+  const grid=getPlateGrid(info.kind,info.idx);
+  const coords=Array.from(sel).map(k=>k.split(',').map(Number));
+  const r0=Math.min(...coords.map(x=>x[0])), c0=Math.min(...coords.map(x=>x[1]));
+  const cells=coords.map(([r,c])=>({dr:r-r0,dc:c-c0,cell:grid[r]&&grid[r][c]?JSON.parse(JSON.stringify(grid[r][c])):null}))
+                     .filter(x=>x.cell);
+  if(cells.length===0) return;
+  clipboard={cells};
+  flashToast(`Copied ${cells.length} well${cells.length>1?'s':''}`);
+}
+function doPaste(){
+  if(!clipboard||!lastClickedCell) return;
+  const{kind,idx,r:anchorR,c:anchorC}=lastClickedCell;
+  const toGrid=getPlateGrid(kind,idx);
+  if(!toGrid) return;
+  const toRows=kind==='vh'?6:8, toCols=kind==='vh'?9:12;
+  // validate bounds first
+  for(const{dr,dc} of clipboard.cells){
+    const tr=anchorR+dr,tc=anchorC+dc;
+    if(tr<0||tr>=toRows||tc<0||tc>=toCols){ flashToast('Paste would go out of bounds — aborted'); return; }
+  }
+  pushUndo();
+  for(const{dr,dc,cell} of clipboard.cells){
+    const tr=anchorR+dr,tc=anchorC+dc;
+    const dest=toGrid[tr][tc];
+    if(dest&&dest.stype==='water') continue; // don't overwrite water wells
+    toGrid[tr][tc]=JSON.parse(JSON.stringify(cell));
+  }
+  refreshCurrentView();
+  flashToast(`Pasted ${clipboard.cells.length} well${clipboard.cells.length>1?'s':''}`);
+}
+function flashToast(msg){
+  let t=document.getElementById('copy-toast');
+  if(!t){
+    t=document.createElement('div');
+    t.id='copy-toast';
+    t.style.cssText='position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1a1a18;color:#fff;padding:8px 16px;border-radius:8px;font-size:12px;z-index:999;opacity:0;transition:opacity .2s';
+    document.body.appendChild(t);
+  }
+  t.textContent=msg;
+  t.style.opacity='1';
+  clearTimeout(t._hideTimer);
+  t._hideTimer=setTimeout(()=>{t.style.opacity='0';},1200);
+}
+document.addEventListener('keydown',function(e){
+  const meta=e.ctrlKey||e.metaKey;
+  if(!meta) return;
+  const tag=(e.target.tagName||'').toLowerCase();
+  if(tag==='input'||tag==='textarea'||e.target.isContentEditable) return; // don't hijack normal text copy/paste
+  if(e.key.toLowerCase()==='c'){ e.preventDefault(); doCopy(); }
+  else if(e.key.toLowerCase()==='v'){ e.preventDefault(); doPaste(); }
+});
+
+let undoStack=[],redoStack=[];
+const UNDO_LIMIT=60;
+function snapshot(){
+  return JSON.stringify({dwPlates,cpPlates,lcmsPlates,vialHolder,subOverrides,
+    subDeletedBaseRows:Array.from(subDeletedBaseRows),subInsertedRows});
+}
+function pushUndo(){
+  undoStack.push(snapshot());
+  if(undoStack.length>UNDO_LIMIT) undoStack.shift();
+  redoStack=[]; // new action invalidates redo history
+  updateUndoButtons();
+}
+function restoreSnapshot(json){
+  const s=JSON.parse(json);
+  dwPlates=s.dwPlates;cpPlates=s.cpPlates;lcmsPlates=s.lcmsPlates;vialHolder=s.vialHolder;subOverrides=s.subOverrides;
+  subDeletedBaseRows=new Set(s.subDeletedBaseRows||[]);
+  subInsertedRows=s.subInsertedRows||[];
+}
+function doUndo(){
+  if(undoStack.length===0) return;
+  redoStack.push(snapshot());
+  const prev=undoStack.pop();
+  restoreSnapshot(prev);
+  refreshCurrentView();
+  updateUndoButtons();
+}
+function doRedo(){
+  if(redoStack.length===0) return;
+  undoStack.push(snapshot());
+  const next=redoStack.pop();
+  restoreSnapshot(next);
+  refreshCurrentView();
+  updateUndoButtons();
+}
+function updateUndoButtons(){
+  document.querySelectorAll('.undo-btn').forEach(b=>b.disabled=undoStack.length===0);
+  document.querySelectorAll('.redo-btn').forEach(b=>b.disabled=redoStack.length===0);
+  document.querySelectorAll('.undo-btn').forEach(b=>b.style.opacity=undoStack.length===0?'.4':'1');
+  document.querySelectorAll('.redo-btn').forEach(b=>b.style.opacity=redoStack.length===0?'.4':'1');
+}
+document.addEventListener('keydown',function(e){
+  const meta=e.ctrlKey||e.metaKey;
+  if(!meta) return;
+  if(e.key.toLowerCase()==='z'&&!e.shiftKey){ e.preventDefault(); doUndo(); }
+  else if((e.key.toLowerCase()==='z'&&e.shiftKey)||e.key.toLowerCase()==='y'){ e.preventDefault(); doRedo(); }
+});
+document.addEventListener('keydown',function(e){
+  if(e.key!=='Delete'&&e.key!=='Backspace') return;
+  const tag=(e.target.tagName||'').toLowerCase();
+  if(tag==='input'||tag==='textarea'||e.target.isContentEditable) return; // don't hijack normal text deletion
+  const infoPlate=activeSelectionInfo(true);
+  const selVh=selections[selKey('vh',0)];
+  if(infoPlate&&infoPlate.count>0){ e.preventDefault(); applyToSelection(infoPlate.kind,null); }
+  else if(selVh&&selVh.size>0){ e.preventDefault(); applyToVH(null); }
+});
+function undoRedoButtons(){
+  return `<button class="btn btn-sm undo-btn" onclick="doUndo()" title="Undo (Ctrl+Z)" style="opacity:${undoStack.length===0?'.4':'1'}">↶ Undo</button>
+  <button class="btn btn-sm redo-btn" onclick="doRedo()" title="Redo (Ctrl+Shift+Z)" style="opacity:${redoStack.length===0?'.4':'1'}">↷ Redo</button>
+  <button class="btn btn-sm" onclick="doCopy()" title="Copy selection (Ctrl+C)">⧉ Copy</button>
+  <button class="btn btn-sm" onclick="doPaste()" title="Paste at last-clicked well (Ctrl+V)" style="opacity:${clipboard?'1':'.4'}">📋 Paste</button>`;
+}
+
+let subOverrides={}; // {rowIndex: {fname, position, method}} — keyed by base sequence index
+let subDeletedBaseRows=new Set(); // base-sequence indices marked deleted
+let subInsertedRows=[]; // [{afterDisplayIdx, fname, mode, position, type, method}] — custom rows spliced into the display
+
+/* Build the *displayed* row list by merging:
+   1. The live base sequence from buildSubmissionSequence() (minus deleted rows)
+   2. Manually inserted custom rows, spliced in at their recorded position
+   Each display row carries a reference back to its base index (for overrides) or
+   a flag marking it as a manual insert (editable in full, no base linkage). */
+function buildDisplayRows(){
+  const final=buildSubmissionSequence();
+  const baseRows=final.map((inj,baseIdx)=>{
+    if(subDeletedBaseRows.has(baseIdx)) return null;
+    const m=inj.mode||'pos';
+    const ov=subOverrides[baseIdx]||{};
+    return{
+      baseIdx, isInsert:false,
+      fname:ov.fname??`${S.date}_${S.col}${m}_${inj.label}`,
+      mode:m, position:ov.position??(inj.position||'—'),
+      type:inj.stype, method:ov.method??'',
+      _inj:inj
+    };
+  }).filter(Boolean);
+
+  if(subInsertedRows.length===0) return baseRows;
+
+  // Splice inserts in by their recorded anchor (insert after the Nth surviving base row, in insertion order)
+  const result=[...baseRows];
+  const sorted=[...subInsertedRows].sort((a,b)=>a.anchor-b.anchor);
+  let offset=0;
+  for(const row of sorted){
+    const pos=Math.min(Math.max(row.anchor+offset,0),result.length);
+    result.splice(pos,0,{...row,isInsert:true});
+    offset++;
+  }
+  return result;
+}
+
+function renderSubView(){
+  const SHUT='C:\\Xcalibur\\methods\\Jake\\241004_RP_03ml_3min_R60K_60-800_DDA2_POS_SHUTDOWN_A3B3';
+  const displayRows=buildDisplayRows();
+
+  // duplicate filename check across the DISPLAYED rows (what will actually be submitted)
+  const nameCounts={};
+  displayRows.forEach(r=>{ nameCounts[r.fname]=(nameCounts[r.fname]||0)+1; });
+  const dupNames=Object.keys(nameCounts).filter(n=>nameCounts[n]>1);
+
+  let rows='';
+  displayRows.forEach((r,displayIdx)=>{
+    const isDup=nameCounts[r.fname]>1;
+    let rc='',badge='',ts=r.type,methDefault='';
+    const m=r.mode||'pos';
+    if(r.isInsert){
+      rc=m==='pos'?'rp':(m==='neg'?'rn':'');
+      badge=`<span class="mb" style="background:#e0e7ff;color:#3730a3">custom</span>`;
+    } else {
+      const inj=r._inj;
+      if(inj.stype==='preblank'||inj.stype==='postblank'){rc='rpr';badge=`<span class="mb mpr">${inj.stype==='preblank'?'pre':'post'}-blank</span>`;}
+      else if(inj.stype==='blank-mid'){rc='rb';badge=`<span class="mb mbl">blank</span>`;ts='blank (mid)';}
+      else if(inj.stype==='qc-mid'){rc='rq';badge=`<span class="mb mq">QC</span>`;ts='QC';}
+      else if(inj.stype==='shutdown'){rc='rs';badge=`<span class="mb ms">shutdown</span>`;methDefault=SHUT;}
+      else{rc=m==='pos'?'rp':'rn';badge=`<span class="mb ${m==='pos'?'mp':'mn'}">${m}</span>`;}
+    }
+    const methVal=r.method||methDefault;
+    const prev=displayRows[displayIdx-1],next=displayRows[displayIdx+1];
+    const isTop=next&&r.position===next.position&&m==='pos';
+    const isBot=prev&&r.position===prev.position&&m==='neg';
+    const editedMark=(!r.isInsert&&(subOverrides[r.baseIdx]?.fname!=null||subOverrides[r.baseIdx]?.position!=null||subOverrides[r.baseIdx]?.method!=null))?' <span style="color:var(--ac)">●</span>':'';
+    const dupStyle=isDup?'background:#fee2e2!important;outline:1px solid #fca5a5':'';
+    const sel=getSel('subrow',0);
+    const rowSelected=sel.has(displayIdx+',0');
+    rows+=`<tr class="${rc}${isTop?' pair-top':isBot?' pair-bot':''}${rowSelected?' selected-row':''}" data-display-idx="${displayIdx}">
+      <td style="color:var(--t3);text-align:right;padding-right:4px;min-width:20px">
+        <input type="checkbox" class="subrow-check" data-idx="${displayIdx}" ${rowSelected?'checked':''} onchange="toggleSubRowSelect(${displayIdx})" style="vertical-align:middle">
+      </td>
+      <td style="color:var(--t3);text-align:right;padding-right:8px;min-width:26px">${displayIdx+1}${editedMark}</td>
+      <td class="fn" contenteditable="true" spellcheck="false" style="${dupStyle}" onblur="subEditDisplay(${displayIdx},'fname',this.innerText)" title="${isDup?'⚠ duplicate file name':''}">${r.fname}${isDup?' ⚠':''}</td>
+      <td>${badge}</td>
+      <td class="fn" contenteditable="true" spellcheck="false" style="white-space:nowrap" onblur="subEditDisplay(${displayIdx},'position',this.innerText)">${r.position}</td>
+      <td style="font-size:10px;color:var(--t2)">${ts}</td>
+      <td class="fn" contenteditable="true" spellcheck="false" style="font-size:9px;color:var(--t3);max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${methVal}" onblur="subEditDisplay(${displayIdx},'method',this.innerText)">${methVal}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-sm" style="padding:1px 6px;font-size:10px" onclick="insertSubRowAt(${displayIdx})" title="Insert row after this one">+row</button>
+        <button class="btn btn-sm" style="padding:1px 6px;font-size:10px" onclick="deleteSubRow(${displayIdx})" title="Delete this row">🗑</button>
+      </td>
+    </tr>`;
+  });
+
+  const dupWarning=dupNames.length>0
+    ? `<div class="note" style="background:#fef2f2;border-left-color:#ef4444;color:#991b1b;margin-bottom:10px">⚠ <strong>${dupNames.length} duplicate file name${dupNames.length>1?'s':''} found</strong> — rows highlighted in red. Xcalibur will not accept duplicate file names. Duplicates: ${dupNames.slice(0,8).map(n=>`<code style="background:#fee2e2;padding:1px 4px;border-radius:3px">${n}</code>`).join(', ')}${dupNames.length>8?'…':''}</div>`
+    : `<div class="note" style="background:#f0fdf4;border-left-color:#16a34a;color:#166534;margin-bottom:10px">✓ No duplicate file names — ${displayRows.length} rows, all unique.</div>`;
+
+  document.getElementById('main').innerHTML=`
+  <div class="ph2"><h2>Submission file</h2>
+    <span class="live-badge"><span class="live-dot"></span>synced live from LCMS plate layout</span>
+  </div>
+  ${dupWarning}
+  <div class="note" style="margin-bottom:10px">Same position in consecutive rows = pos then neg on the same well. File name, position, and method are all directly editable. Use the checkboxes + row buttons below to copy/delete/insert rows. Manually edited rows are marked ●. Calibration-line wells are excluded from this file by design.</div>
+  <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+    ${undoRedoButtons()}
+    <div class="et-sep"></div>
+    <button class="btn btn-sm" onclick="copySelectedSubRows()" title="Copy checked rows">⧉ Copy rows</button>
+    <button class="btn btn-sm" onclick="pasteSubRowsAfterSelection()" title="Paste copied rows after the last checked row" style="opacity:${subRowClipboard.length?'1':'.4'}">📋 Paste rows</button>
+    <button class="btn btn-sm" onclick="deleteSelectedSubRows()" title="Delete all checked rows">🗑 Delete checked</button>
+    <div class="et-sep"></div>
+    <button class="btn btn-sm" onclick="cpTSV()">⎘ copy TSV</button>
+    <button class="btn btn-sm" onclick="dlCSV()">↓ download CSV</button>
+    <button class="btn btn-sm" onclick="renderSubView()">↻ refresh now</button>
+    <button class="btn btn-sm" onclick="if(confirm('Clear all manual edits, inserted rows, and deletions?')){pushUndo();subOverrides={};subDeletedBaseRows=new Set();subInsertedRows=[];renderSubView();}">reset all overrides</button>
+  </div>
+  <div class="tw"><table id="sub-table">
+    <thead><tr><th></th><th>#</th><th>File name</th><th>Mode</th><th>Position</th><th>Type</th><th>Method</th><th>Row</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>
+  <div style="margin-top:8px"><button class="btn btn-sm" onclick="insertSubRowAt(${displayRows.length-1})">+ add row at end</button></div>`;
+  updateStats(displayRows.map(r=>({stype:r.type})));
+}
+
+/* ---- Row-level edit/delete/insert/copy-paste for the submission table ---- */
+function subEditDisplay(displayIdx,field,val){
+  const trimmed=val.trim();
+  const displayRows=buildDisplayRows();
+  const row=displayRows[displayIdx];
+  if(!row) return;
+  if(row.isInsert){
+    const idx=subInsertedRows.indexOf(row.isInsert===true?row:subInsertedRows.find(x=>x===row));
+    // find by reference is unreliable after rebuild; instead locate by matching object identity via stored fields
+    const target=subInsertedRows.find(r=>r._uid===row._uid);
+    if(target){
+      pushUndo();
+      target[field]=trimmed;
+      renderSubView();
+    }
+    return;
+  }
+  const current=subOverrides[row.baseIdx]?.[field];
+  if(current===trimmed) return;
+  pushUndo();
+  if(!subOverrides[row.baseIdx]) subOverrides[row.baseIdx]={};
+  subOverrides[row.baseIdx][field]=trimmed;
+  renderSubView();
+}
+function insertSubRowAt(displayIdx){
+  pushUndo();
+  const uid='ins_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+  subInsertedRows.push({anchor:displayIdx+1,_uid:uid,fname:'new_sample_pos',mode:'pos',position:'—',type:'sample',method:''});
+  renderSubView();
+}
+function deleteSubRow(displayIdx){
+  const displayRows=buildDisplayRows();
+  const row=displayRows[displayIdx];
+  if(!row) return;
+  pushUndo();
+  if(row.isInsert){
+    subInsertedRows=subInsertedRows.filter(r=>r._uid!==row._uid);
+  } else {
+    subDeletedBaseRows.add(row.baseIdx);
+  }
+  renderSubView();
+}
+function toggleSubRowSelect(displayIdx){
+  const sel=getSel('subrow',0);
+  const key=displayIdx+',0';
+  if(sel.has(key)) sel.delete(key); else sel.add(key);
+}
+let subRowClipboard=[];
+function copySelectedSubRows(){
+  const sel=getSel('subrow',0);
+  if(sel.size===0){ flashToast('No rows checked'); return; }
+  const displayRows=buildDisplayRows();
+  const idxs=Array.from(sel).map(k=>parseInt(k.split(',')[0])).sort((a,b)=>a-b);
+  subRowClipboard=idxs.map(i=>{
+    const r=displayRows[i];
+    return{fname:r.fname,mode:r.mode,position:r.position,type:r.type,method:r.method};
+  });
+  flashToast(`Copied ${subRowClipboard.length} row${subRowClipboard.length>1?'s':''}`);
+}
+function pasteSubRowsAfterSelection(){
+  if(subRowClipboard.length===0) return;
+  const sel=getSel('subrow',0);
+  const idxs=Array.from(sel).map(k=>parseInt(k.split(',')[0]));
+  const anchor=idxs.length?Math.max(...idxs)+1:buildDisplayRows().length;
+  pushUndo();
+  subRowClipboard.forEach((r,i)=>{
+    const uid='ins_'+Date.now()+'_'+i+'_'+Math.random().toString(36).slice(2,5);
+    subInsertedRows.push({anchor:anchor+i,_uid:uid,fname:r.fname+'_copy',mode:r.mode,position:r.position,type:r.type,method:r.method});
+  });
+  sel.clear();
+  renderSubView();
+  flashToast(`Pasted ${subRowClipboard.length} row${subRowClipboard.length>1?'s':''}`);
+}
+function deleteSelectedSubRows(){
+  const sel=getSel('subrow',0);
+  if(sel.size===0){ flashToast('No rows checked'); return; }
+  const displayRows=buildDisplayRows();
+  const idxs=Array.from(sel).map(k=>parseInt(k.split(',')[0]));
+  pushUndo();
+  idxs.forEach(i=>{
+    const row=displayRows[i];
+    if(!row) return;
+    if(row.isInsert) subInsertedRows=subInsertedRows.filter(r=>r._uid!==row._uid);
+    else subDeletedBaseRows.add(row.baseIdx);
+  });
+  sel.clear();
+  renderSubView();
+}
+
+function cpTSV(){
+  const r=document.querySelectorAll('#sub-table tr');
+  const txt=[...r].map(x=>{
+    const cells=[...x.querySelectorAll('th,td')];
+    const trimmed=cells.slice(1,cells.length-1); // drop leading checkbox col, trailing actions col
+    return trimmed.map(c=>c.innerText.replace(/\n/g,' ').trim()).join('\t');
+  }).join('\n');
+  navigator.clipboard.writeText(txt).then(()=>flashToast('Copied as TSV'));
+}
+function dlCSV(){
+  const r=document.querySelectorAll('#sub-table tr');
+  const txt=[...r].map(x=>{
+    const cells=[...x.querySelectorAll('th,td')];
+    const trimmed=cells.slice(1,cells.length-1);
+    return trimmed.map(c=>'"'+c.innerText.replace(/"/g,'""').replace(/\n/g,' ').trim()+'"').join(',');
+  }).join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:'text/csv'}));
+  a.download=`LCMS_${S.date||'run'}.csv`;a.click();
+}
+
+function updateStats(final){
+  const tot=final.length,smps=final.filter(x=>['sample','dmso','pbs'].includes(x.stype)).length;
+  const cals=final.filter(x=>x.stype==='cal').length,bqs=final.filter(x=>x.stype.includes('blank')||x.stype.includes('qc')).length;
+  document.getElementById('sb-stats').innerHTML=`<div style="font-size:11px;font-weight:600;margin-bottom:6px">Run summary</div>
+  <div class="sg">
+    <div class="st"><div class="v">${tot}</div><div class="l">total inj.</div></div>
+    <div class="st"><div class="v">${lcmsPlates.length}</div><div class="l">LCMS plates</div></div>
+    <div class="st"><div class="v">${smps}</div><div class="l">samples</div></div>
+    <div class="st"><div class="v">${cals}</div><div class="l">cal pts</div></div>
+    <div class="st"><div class="v">${bqs}</div><div class="l">blanks/QC</div></div>
+  </div>`;
+}
+
+/* =====================================================================
+   MAIN VIEW ROUTER
+   ===================================================================== */
+/* =====================================================================
+   EXPERIMENT RECORD EXPORT
+   Produces a self-contained, printable HTML document: timestamp, all
+   setup parameters, and every plate layout (deepwell/collect/LCMS/vial
+   holder) rendered as plain tables — suitable as a saved lab record.
+   ===================================================================== */
+function plateToTable(grid,rows,cols,rowLabels,colLabels){
+  let h='<table class="rec-plate"><thead><tr><th></th>';
+  for(let c=0;c<cols;c++) h+=`<th>${colLabels[c]}</th>`;
+  h+='</tr></thead><tbody>';
+  for(let r=0;r<rows;r++){
+    h+=`<tr><th>${rowLabels[r]}</th>`;
+    for(let c=0;c<cols;c++){
+      const cell=grid[r][c];
+      let txt='';
+      if(cell){
+        if(cell.stype==='water') txt='H₂O';
+        else if(cell.stype==='balance') txt='balance';
+        else if(cell.stype==='cal') txt=`${cell.cpd||''} ${cell.conc||''}${cell.rep?' r'+cell.rep:''}`;
+        else if(cell==='blank') txt='blank';
+        else if(cell==='qc') txt='QC';
+        else if(cell==='cal-reserved') txt='cal';
+        else if(cell.stype==='shutdown') txt='shutdown';
+        else txt=cell.label||`${cell.cpd||''} D${cell.donor||''} r${cell.rep||''}${cell.tp!=null?' '+cell.tp+'h':''}`;
+      }
+      h+=`<td>${txt}</td>`;
+    }
+    h+='</tr>';
+  }
+  return h+'</tbody></table>';
+}
+
+function exportExperimentRecord(){
+  if(!S){ alert('Generate a layout first (Step 1 → Generate layout).'); return; }
+  const ts=nowTimestamp();
+  const modesStr=[S.modePos?'pos':null,S.modeNeg?'neg':null].filter(Boolean).join(' + ');
+
+  let html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Experiment Record — ${S.date}</title>
+  <style>
+    body{font-family:-apple-system,'Segoe UI',sans-serif;font-size:12px;color:#1a1a18;max-width:1100px;margin:0 auto;padding:32px}
+    h1{font-size:20px;margin-bottom:4px}
+    h2{font-size:15px;margin:28px 0 10px;border-bottom:2px solid #1a1a18;padding-bottom:4px}
+    h3{font-size:13px;margin:16px 0 6px;color:#444}
+    .meta{color:#666;font-size:11px;margin-bottom:20px}
+    .params{display:grid;grid-template-columns:repeat(3,1fr);gap:8px 20px;margin-bottom:10px}
+    .param{font-size:11px}
+    .param b{display:block;color:#888;font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.03em}
+    table.rec-plate{border-collapse:collapse;font-size:9px;margin-bottom:16px}
+    table.rec-plate th,table.rec-plate td{border:1px solid #ccc;padding:3px 5px;text-align:center;min-width:34px}
+    table.rec-plate th{background:#f0f0ee;font-weight:600}
+    table.rec-sub{border-collapse:collapse;font-size:10px;width:100%;margin-bottom:16px}
+    table.rec-sub th,table.rec-sub td{border:1px solid #ddd;padding:3px 6px;text-align:left}
+    table.rec-sub th{background:#f0f0ee}
+    .plate-block{margin-bottom:24px}
+    .tag-list-print{font-size:11px;color:#444;margin-bottom:6px}
+    @media print{ body{padding:10px} .no-print{display:none} }
+    .print-btn{position:fixed;top:16px;right:16px;padding:8px 16px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px}
+  </style></head><body>
+  <button class="print-btn no-print" onclick="window.print()">🖨 Print / Save as PDF</button>
+  <h1>Fermentation &amp; LCMS Experiment Record</h1>
+  <div class="meta">Generated: ${ts} &nbsp;|&nbsp; Run date: ${S.date} &nbsp;|&nbsp; Column: ${S.col} &nbsp;|&nbsp; Modes: ${modesStr}</div>
+
+  <h2>1. Experiment parameters</h2>
+  <div class="params">
+    <div class="param"><b>Donors</b>${donors.join(', ')||'—'}</div>
+    <div class="param"><b>PBS abiotic control</b>${S.hasPBS?'Yes':'No'}</div>
+    <div class="param"><b>DMSO vehicle control</b>${S.hasDmsoCtrl?'Yes':'No'}</div>
+    <div class="param"><b>Timepoints</b>${timepoints.map(t=>t+'h').join(', ')||'—'}</div>
+    <div class="param"><b>Blank/QC interval</b>${S.qcInterval} samples</div>
+    <div class="param"><b>Pre-blanks / Post-blanks</b>${S.preBlanks} / ${S.postBlanks}</div>
+    <div class="param"><b>Blank vial position</b>${S.blankPos}</div>
+    <div class="param"><b>QC vial position</b>${S.qcPos}</div>
+    <div class="param"><b>Vial holder slot</b>${S.vhColor}</div>
+    <div class="param"><b>First LCMS plate color</b>${S.plateColor}</div>
+    <div class="param"><b>Available LCMS colors</b>${availableLcmsColors().join(', ')}</div>
+    <div class="param"><b>Shutdown injection</b>${S.hasShutdown?'Yes (from blank vial)':'No'}</div>
+    <div class="param"><b>Calibration replicates</b>${S.calReps} (technical)</div>
+    <div class="param"><b>Calibration strategy</b>${S.calStrat==='per-tp'?'Before each timepoint':'Once at start'}</div>
+    <div class="param"><b>Calibration location</b>${S.calLoc==='vial'?'Vial holder':'LCMS plate wells'}</div>
+    <div class="param"><b>Calibration concentrations</b>${S.calConcs.join(', ')}</div>
+  </div>
+
+  <h3>Compounds</h3>
+  <div class="tag-list-print">${compounds.map(c=>`${c.abbr}${c.name?' ('+c.name+')':''} [${c.type}, stock ${c.stockConc||10} ${c.stockUnit||'mM'}]`).join(' &nbsp;·&nbsp; ')}</div>
+
+  <h2>2. Deepwell plates</h2>`;
+
+  dwPlates.forEach((p,i)=>{
+    const rowLabels=R8, colLabels=Array.from({length:12},(_,c)=>c+1);
+    html+=`<div class="plate-block"><h3>Deepwell plate ${i+1} — ${(p.rowGroups||[]).map(g=>g.donor==='PBS'?'PBS':'Donor '+g.donor).join(' + ')}</h3>
+    ${plateToTable(p.grid,8,12,rowLabels,colLabels)}</div>`;
+  });
+
+  html+=`<h2>3. Collect plates</h2>`;
+  cpPlates.forEach((p,i)=>{
+    const label=p.isBalance?'Balance plate':`Collect plate ${i+1}${p.tp!=null?' ('+p.tp+'h)':''}`;
+    html+=`<div class="plate-block"><h3>${label}</h3>
+    ${plateToTable(p.grid,8,12,R8,Array.from({length:12},(_,c)=>c+1))}</div>`;
+  });
+
+  html+=`<h2>4. LCMS plate layout</h2>
+  <h3>Vial holder (${S.vhColor}:)</h3>
+  ${plateToTable(vialHolder,6,9,R6,Array.from({length:9},(_,c)=>c+1))}`;
+  lcmsPlates.forEach((lp,i)=>{
+    html+=`<div class="plate-block"><h3>LCMS plate ${i+1} [${lp.color}]</h3>
+    ${plateToTable(lp.grid,8,12,R8,Array.from({length:12},(_,c)=>c+1))}</div>`;
+  });
+
+  html+=`<h2>5. Submission file</h2>`;
+  const displayRows=buildDisplayRows();
+  html+=`<table class="rec-sub"><thead><tr><th>#</th><th>File name</th><th>Mode</th><th>Position</th><th>Type</th><th>Method</th></tr></thead><tbody>`;
+  displayRows.forEach((r,idx)=>{
+    html+=`<tr><td>${idx+1}</td><td style="font-family:monospace;font-size:9px">${r.fname}</td><td>${r.mode||''}</td><td style="font-family:monospace">${r.position}</td><td>${r.type}</td><td style="font-size:9px">${r.method||''}</td></tr>`;
+  });
+  html+=`</tbody></table>
+  <div class="meta" style="margin-top:30px">— End of record — generated by LCMS Planner on ${ts} —</div>
+  </body></html>`;
+
+  const blob=new Blob([html],{type:'text/html'});
+  const url=URL.createObjectURL(blob);
+  const w=window.open(url,'_blank');
+  if(!w){
+    // popup blocked — fall back to download
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=`experiment_record_${S.date}_${ts.replace(/[: ]/g,'-')}.html`;
+    a.click();
+    flashToast('Popup blocked — downloaded record instead');
+  }
+}
+
+function renderMain(view,preserveScroll){
+  const scrollY=window.scrollY;
+  if(view==='setup') renderSetup();
+  else if(view==='dw') renderDwView();
+  else if(view==='cp') renderCpView();
+  else if(view==='lp') renderLpView();
+  else if(view==='sub') renderSubView();
+  if(preserveScroll) window.scrollTo(0,scrollY);
+  updateToolbar();
+  updateUndoButtons();
+  updateProgress();
+  syncFocusDOM();
+  scheduleSave();
+}
+
+/* =====================================================================
+   SIDEBAR TOGGLE, WELL ZOOM & PROGRESS BAR
+   ===================================================================== */
+function toggleSidebar(){
+  sidebarCollapsed=!sidebarCollapsed;
+  applySidebarState();
+  try{localStorage.setItem('lcms_sidebar_collapsed',sidebarCollapsed?'1':'0');}catch(err){}
+}
+function applySidebarState(){
+  const root=document.getElementById('app-root');
+  if(root) root.classList.toggle('sb-collapsed',sidebarCollapsed);
+  const btn=document.getElementById('sb-toggle');
+  if(btn) btn.textContent=sidebarCollapsed?'▸':'◂';
+}
+function applyZoom(){
+  document.documentElement.style.setProperty('--well-scale',wellZoom.toFixed(2));
+  const el=document.getElementById('zoom-pct');
+  if(el) el.textContent=Math.round(wellZoom*100)+'%';
+}
+function adjustZoom(delta){
+  wellZoom=Math.min(1.6,Math.max(0.6,+(wellZoom+delta).toFixed(2)));
+  applyZoom();
+  try{localStorage.setItem('lcms_well_zoom',wellZoom);}catch(err){}
+}
+function updateProgress(){
+  const fill=document.getElementById('progress-fill');
+  if(!fill) return;
+  const done=document.querySelectorAll('.nav-item.done').length;
+  fill.style.width=(done/5*100)+'%';
+}
+
+/* =====================================================================
+   TOUCH SUPPORT — mirrors the mouse drag-select / move-mode flow so
+   plate grids are selectable and movable on tablets/touchscreens.
+   Double-tap the same well within 400ms opens its editor.
+   ===================================================================== */
+let lastTap=null;
+function wellTouchStart(e,kind,idx,r,c){
+  if(e.touches&&e.touches.length>1) return; // ignore pinch/multi-touch
+  const now=Date.now();
+  if(lastTap&&lastTap.kind===kind&&lastTap.idx===idx&&lastTap.r===r&&lastTap.c===c&&(now-lastTap.time)<400){
+    lastTap=null;
+    e.preventDefault();
+    const evt=wellEditorEvent(kind,idx,r,c);
+    if(evt){ if(kind==='vh') openVHEditor(evt,r,c); else openCellEditor(evt,kind,idx,r,c); }
+    return;
+  }
+  lastTap={kind,idx,r,c,time:now};
+  e.preventDefault(); // stop the page from scrolling while selecting/moving
+  startDrag(e,kind,idx,r,c);
+  window.addEventListener('touchmove',touchDragMove,{passive:false});
+  window.addEventListener('touchend',touchDragEnd,{once:true});
+}
+function touchDragMove(e){
+  if(!e.touches||e.touches.length!==1) return;
+  e.preventDefault();
+  const t=e.touches[0];
+  const el=document.elementFromPoint(t.clientX,t.clientY);
+  const wellEl=el&&el.closest?el.closest('.well'):null;
+  if(!wellEl) return;
+  const container=wellEl.closest('[data-kind]');
+  if(!container) return;
+  const kind=container.dataset.kind,idx=parseInt(container.dataset.idx);
+  const r=parseInt(wellEl.dataset.r),c=parseInt(wellEl.dataset.c);
+  dragOver(null,kind,idx,r,c);
+}
+function touchDragEnd(){
+  window.removeEventListener('touchmove',touchDragMove);
+  if(moveMode) endMoveDrag(); else endDrag();
+}
+
+/* =====================================================================
+   AUTOSAVE / RESTORE — debounced snapshot of all editable state to
+   localStorage so an accidental reload doesn't lose an in-progress plate
+   layout. Setup-list edits (donors/compounds/timepoints) persist too;
+   in-flight setup form field values are not captured until Generate.
+   ===================================================================== */
+const SAVE_KEY='lcms_planner_v19_autosave';
+let saveTimer=null;
+function fullSnapshotForSave(){
+  return{
+    v:1,
+    donors,compounds,timepoints,S,
+    dwPlates,cpPlates,lcmsPlates,vialHolder,
+    nextDwId,nextCpId,nextLpId,
+    subOverrides,subDeletedBaseRows:Array.from(subDeletedBaseRows),subInsertedRows,
+    lastView:currentNavView()
+  };
+}
+function currentNavView(){
+  const a=document.querySelector('.nav-item.active');
+  return a?a.id.replace('nav-',''):'setup';
+}
+function scheduleSave(){
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(()=>{
+    try{ localStorage.setItem(SAVE_KEY,JSON.stringify(fullSnapshotForSave())); }catch(err){}
+  },600);
+}
+function tryLoadSavedState(){
+  let raw;
+  try{ raw=localStorage.getItem(SAVE_KEY); }catch(err){ return null; }
+  if(!raw) return null;
+  try{
+    const data=JSON.parse(raw);
+    return data&&data.v?data:null;
+  }catch(err){ return null; }
+}
+function applyRestoredState(data){
+  donors=data.donors||[];compounds=data.compounds||[];timepoints=data.timepoints||[];
+  S=data.S||null;
+  dwPlates=data.dwPlates||[];cpPlates=data.cpPlates||[];lcmsPlates=data.lcmsPlates||[];
+  vialHolder=data.vialHolder&&data.vialHolder.length?data.vialHolder:emptyVH();
+  nextDwId=data.nextDwId||1;nextCpId=data.nextCpId||1;nextLpId=data.nextLpId||1;
+  subOverrides=data.subOverrides||{};
+  subDeletedBaseRows=new Set(data.subDeletedBaseRows||[]);
+  subInsertedRows=data.subInsertedRows||[];
+  if(S&&dwPlates.length){
+    ['dw','cp','lp','sub'].forEach(n=>{const el=document.getElementById('nav-'+n);if(el) el.classList.add('done');});
+  }
+}
+
+// init
+let sidebarCollapsed=false;
+let wellZoom=1;
+try{ sidebarCollapsed=localStorage.getItem('lcms_sidebar_collapsed')==='1'; }catch(err){}
+try{ const z=parseFloat(localStorage.getItem('lcms_well_zoom')); if(!isNaN(z)) wellZoom=z; }catch(err){}
+applySidebarState();
+applyZoom();
+
+const savedState=tryLoadSavedState();
+let startView='setup';
+if(savedState&&((savedState.donors&&savedState.donors.length)||(savedState.dwPlates&&savedState.dwPlates.length))){
+  if(confirm('偵測到上次未儲存的工作階段,是否要恢復?(取消將載入示範資料並清除已儲存的暫存)')){
+    applyRestoredState(savedState);
+    startView=savedState.lastView||'setup';
+  } else {
+    try{ localStorage.removeItem(SAVE_KEY); }catch(err){}
+    loadDemo();
+  }
+} else {
+  loadDemo();
+}
+document.querySelectorAll('.nav-item').forEach(e=>e.classList.remove('active'));
+const startNav=document.getElementById('nav-'+startView);
+if(startNav) startNav.classList.add('active'); else document.getElementById('nav-setup').classList.add('active');
+renderMain(startView);
+
+</script>
+</body>
+</html>
