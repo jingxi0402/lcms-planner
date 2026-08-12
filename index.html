@@ -302,8 +302,11 @@ function renderSetup(){
   </div>
 
   <div class="card">
-    <h3>Compounds &nbsp;<span style="font-size:11px;font-weight:400;color:var(--t3)">one column each</span></h3>
-    <div class="tl" id="compounds-list"></div>
+    <h3>Compounds &nbsp;<span style="font-size:11px;font-weight:400;color:var(--t3)">one column each — click any field to edit, ▲▼ to reorder</span></h3>
+    <div class="tw" style="margin-bottom:8px"><table>
+      <thead><tr><th style="width:48px"></th><th>Abbr</th><th>Name</th><th>Type</th><th>Stock conc</th><th>Unit</th><th>Target (well) conc</th><th>Unit</th><th></th></tr></thead>
+      <tbody id="compounds-list"></tbody>
+    </table></div>
     <div class="row">
       <input type="text" id="cpd-abbr" placeholder="Abbreviation" style="width:90px">
       <input type="text" id="cpd-name" placeholder="Full name (optional)" style="width:155px">
@@ -358,10 +361,58 @@ function renderSetup(){
 }
 
 function addDonor(){const v=document.getElementById('donor-input').value.trim();if(!v||donors.includes(v))return;donors.push(v);document.getElementById('donor-input').value='';rdD();}
-function addCompound(){const a=document.getElementById('cpd-abbr').value.trim();if(!a)return;const stockConc=parseFloat(document.getElementById('cpd-stock').value)||10;const stockUnit=document.getElementById('cpd-stock-unit').value||'mM';compounds.push({abbr:a,name:document.getElementById('cpd-name').value.trim(),type:document.getElementById('cpd-type').value,stockConc,stockUnit});document.getElementById('cpd-abbr').value='';document.getElementById('cpd-name').value='';rdC();}
+function addCompound(){const a=document.getElementById('cpd-abbr').value.trim();if(!a)return;const stockConc=parseFloat(document.getElementById('cpd-stock').value)||10;const stockUnit=document.getElementById('cpd-stock-unit').value||'mM';compounds.push({abbr:a,name:document.getElementById('cpd-name').value.trim(),type:document.getElementById('cpd-type').value,stockConc,stockUnit,targetConc:'',targetUnit:'µM'});document.getElementById('cpd-abbr').value='';document.getElementById('cpd-name').value='';rdC();}
 function addTP(){const v=document.getElementById('tp-input').value.trim();if(!v)return;v.split(',').forEach(x=>{const t=x.trim();if(t&&!timepoints.includes(t))timepoints.push(t);});document.getElementById('tp-input').value='';rdT();}
 function rdD(){const el=document.getElementById('donors-list');if(el) el.innerHTML=donors.map((d,i)=>`<span class="tag donor">${d}<button onclick="donors.splice(${i},1);rdD()">×</button></span>`).join('');scheduleSave();}
-function rdC(){const el=document.getElementById('compounds-list');if(el) el.innerHTML=compounds.map((c,i)=>`<span class="tag ${c.type}">${c.abbr}${c.name?' — '+c.name:''} <span style="opacity:.6">[${c.type}, ${c.stockConc||10}${c.stockUnit||'mM'}]</span><button onclick="compounds.splice(${i},1);rdC()">×</button></span>`).join('');scheduleSave();}
+function escAttr(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
+const CPD_TYPE_COLOR={test:'#3b82f6',nc:'#16a34a',pc:'#a855f7'};
+function rdC(){
+  const el=document.getElementById('compounds-list');
+  if(!el) return;
+  el.innerHTML=compounds.length===0
+    ? '<tr><td colspan="7" style="color:var(--t3);text-align:center;padding:10px;font-size:11px">No compounds yet — add one below.</td></tr>'
+    : compounds.map((c,i)=>`<tr>
+        <td style="border-left:3px solid ${CPD_TYPE_COLOR[c.type]||'#94a3b8'};white-space:nowrap;padding-left:6px">
+          <button class="btn btn-sm" style="padding:1px 5px" onclick="moveCompound(${i},-1)" ${i===0?'disabled':''} title="Move up">▲</button>
+          <button class="btn btn-sm" style="padding:1px 5px" onclick="moveCompound(${i},1)" ${i===compounds.length-1?'disabled':''} title="Move down">▼</button>
+        </td>
+        <td><input type="text" value="${escAttr(c.abbr)}" style="width:80px;height:26px;font-size:11px" oninput="updateCompoundField(${i},'abbr',this.value)"></td>
+        <td><input type="text" value="${escAttr(c.name||'')}" placeholder="full name" style="width:150px;height:26px;font-size:11px" oninput="updateCompoundField(${i},'name',this.value)"></td>
+        <td><select style="height:26px;font-size:11px" onchange="updateCompoundField(${i},'type',this.value)">
+          <option value="test" ${c.type==='test'?'selected':''}>test compound</option>
+          <option value="nc" ${c.type==='nc'?'selected':''}>negative ctrl (NC)</option>
+          <option value="pc" ${c.type==='pc'?'selected':''}>positive ctrl (PC)</option>
+        </select></td>
+        <td><input type="number" value="${c.stockConc||10}" style="width:70px;height:26px;font-size:11px" oninput="updateCompoundField(${i},'stockConc',this.value)"></td>
+        <td><select style="height:26px;font-size:11px" onchange="updateCompoundField(${i},'stockUnit',this.value)">
+          <option value="mM" ${c.stockUnit==='mM'?'selected':''}>mM</option>
+          <option value="µM" ${c.stockUnit==='µM'?'selected':''}>µM</option>
+          <option value="mg/mL" ${c.stockUnit==='mg/mL'?'selected':''}>mg/mL</option>
+        </select></td>
+        <td><input type="number" value="${c.targetConc??''}" placeholder="e.g. 100" style="width:80px;height:26px;font-size:11px" oninput="updateCompoundField(${i},'targetConc',this.value)"></td>
+        <td><select style="height:26px;font-size:11px" onchange="updateCompoundField(${i},'targetUnit',this.value)">
+          <option value="mM" ${c.targetUnit==='mM'?'selected':''}>mM</option>
+          <option value="µM" ${(c.targetUnit||'µM')==='µM'?'selected':''}>µM</option>
+          <option value="nM" ${c.targetUnit==='nM'?'selected':''}>nM</option>
+        </select></td>
+        <td><button class="btn btn-sm" style="padding:1px 6px" onclick="removeCompound(${i})" title="Remove">🗑</button></td>
+      </tr>`).join('');
+  scheduleSave();
+}
+function updateCompoundField(i,field,val){
+  if(!compounds[i]) return;
+  if(field==='stockConc') compounds[i][field]=parseFloat(val)||10;
+  else if(field==='targetConc') compounds[i][field]=val===''?'':(parseFloat(val)||'');
+  else compounds[i][field]=val;
+  scheduleSave();
+}
+function moveCompound(i,dir){
+  const j=i+dir;
+  if(j<0||j>=compounds.length) return;
+  const tmp=compounds[i];compounds[i]=compounds[j];compounds[j]=tmp;
+  rdC();
+}
+function removeCompound(i){ compounds.splice(i,1); rdC(); }
 function rdT(){const el=document.getElementById('tp-list');if(el) el.innerHTML=timepoints.map((t,i)=>`<span class="tag tp">${t}h<button onclick="timepoints.splice(${i},1);rdT()">×</button></span>`).join('');scheduleSave();}
 
 function loadDemo(){
@@ -1066,17 +1117,23 @@ function renderDwView(){
    ===================================================================== */
 function renderExposureCalculator(){
   const testCpds=compounds.filter(c=>c.type==='test'||c.type==='nc'||c.type==='pc');
-  const rows=testCpds.map(c=>`
+  const rows=testCpds.map(c=>{
+    const idx=compounds.indexOf(c);
+    return`
     <tr>
       <td style="font-family:var(--mono);font-size:11px">${c.abbr}</td>
       <td style="font-size:10px;color:var(--t2)">${c.stockConc||10} ${c.stockUnit||'mM'}</td>
-      <td><input type="number" class="exp-target" data-cpd="${c.abbr}" data-stock="${c.stockConc||10}" data-unit="${c.stockUnit||'mM'}" placeholder="target conc" style="width:90px;height:28px;font-size:11px"></td>
-      <td><select class="exp-target-unit" data-cpd="${c.abbr}" style="width:70px;height:28px;font-size:11px"><option>µM</option><option>nM</option><option>mM</option></select></td>
+      <td><input type="number" class="exp-target" data-cpd="${c.abbr}" data-idx="${idx}" data-stock="${c.stockConc||10}" data-unit="${c.stockUnit||'mM'}" value="${c.targetConc??''}" placeholder="target conc" style="width:90px;height:28px;font-size:11px"></td>
+      <td><select class="exp-target-unit" data-cpd="${c.abbr}" data-idx="${idx}" style="width:70px;height:28px;font-size:11px">
+        <option value="mM" ${c.targetUnit==='mM'?'selected':''}>mM</option>
+        <option value="µM" ${(c.targetUnit||'µM')==='µM'?'selected':''}>µM</option>
+        <option value="nM" ${c.targetUnit==='nM'?'selected':''}>nM</option>
+      </select></td>
       <td class="exp-result" data-cpd="${c.abbr}" style="font-size:10px;color:var(--t2)">—</td>
-    </tr>`).join('');
+    </tr>`;}).join('');
   return `<div class="card" id="exp-calc" style="margin-top:20px">
     <h3>💧 Exposure mix calculator (DMSO + PBS + Drug, 250µL/well)</h3>
-    <div class="note" style="margin-bottom:10px">Dilutes each compound's DMSO stock with PBS to the target well concentration, then tops up to the exposure-mix volume with PBS. Final DMSO in the <strong>whole 2000µL well</strong> must stay under the safety limit — vehicle/DMSO control wells get the same DMSO volume (no compound) to keep the variable constant.</div>
+    <div class="note" style="margin-bottom:10px">Target (well) concentrations are set per-compound in <strong>Step 1 → Compounds</strong> — editing them here updates the same values there. Dilutes each compound's DMSO stock with PBS to the target well concentration, then tops up to the exposure-mix volume with PBS. Final DMSO in the <strong>whole 2000µL well</strong> must stay under the safety limit — vehicle/DMSO control wells get the same DMSO volume (no compound) to keep the variable constant.</div>
     <div class="g3">
       <div class="field"><label>Exposure mix volume per well (µL)</label><input type="number" id="exp-mixvol" value="250"></div>
       <div class="field"><label>Total well volume (µL)</label><input type="number" id="exp-wellvol" value="2000"></div>
@@ -1093,6 +1150,13 @@ function wireExposureCalc(){
   document.querySelectorAll('.exp-target,.exp-target-unit,#exp-mixvol,#exp-wellvol,#exp-dmsomax').forEach(el=>{
     el.addEventListener('input',computeExposureCalc);
   });
+  document.querySelectorAll('.exp-target').forEach(el=>{
+    el.addEventListener('input',function(){ updateCompoundField(parseInt(this.dataset.idx),'targetConc',this.value); });
+  });
+  document.querySelectorAll('.exp-target-unit').forEach(el=>{
+    el.addEventListener('change',function(){ updateCompoundField(parseInt(this.dataset.idx),'targetUnit',this.value); });
+  });
+  computeExposureCalc();
 }
 const UNIT_TO_M={mM:1e-3,'µM':1e-6,nM:1e-9}; // convert to mol/L multiplier (relative)
 function computeExposureCalc(){
