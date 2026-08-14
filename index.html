@@ -107,11 +107,11 @@ input:focus,select:focus{border-color:var(--ac)}
 .xh:hover{color:var(--ac)}
 .rl{display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;color:var(--t3);cursor:pointer}
 .rl:hover{color:var(--ac)}
-.well{height:calc(42px * var(--well-scale,1));border:1px solid rgba(0,0,0,.08);border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:calc(6.5px * var(--well-scale,1));text-align:center;line-height:1.2;overflow:hidden;padding:1px;position:relative;cursor:cell}
+.well{height:calc(48px * var(--well-scale,1));border:1px solid rgba(0,0,0,.08);border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:calc(9px * var(--well-scale,1));font-weight:500;text-align:center;line-height:1.25;overflow:hidden;padding:1px;position:relative;cursor:cell}
 .well.selected{outline:2px solid var(--ac);outline-offset:-1px;z-index:5}
 .well.selected::after{content:'';position:absolute;inset:0;background:rgba(37,99,235,.12)}
 .well.kfocus{box-shadow:0 0 0 2px #f59e0b,0 0 0 4px rgba(245,158,11,.25) inset;z-index:7}
-.pgvial .well{height:calc(46px * var(--well-scale,1))}
+.pgvial .well{height:calc(52px * var(--well-scale,1))}
 .well.move-target{outline:2px solid #f59e0b;outline-offset:-1px;z-index:6}
 .well.move-target::after{content:'';position:absolute;inset:0;background:rgba(245,158,11,.18)}
 .well:hover .wt{display:block}
@@ -278,17 +278,8 @@ function renderSetup(){
       <div class="field"><label>Column</label><select id="col-type"><option value="Rp" ${S?.col==='Rp'?'selected':''}>RP</option><option value="Hi" ${S?.col==='Hi'?'selected':''}>HILIC</option></select></div>
       <div class="field"><label>First LCMS plate color</label><select id="plate-color">${PC.map(c=>`<option value="${c}" ${S?.plateColor===c?'selected':''}>${c}</option>`).join('')}</select></div>
       <div class="field"><label>Vial holder occupies slot</label><select id="vh-color">${PC.map(c=>`<option value="${c}" ${(S?.vhColor||'G')===c?'selected':''}>${c}</option>`).join('')}</select></div>
-      <div class="field"><label>Blank/QC interval</label><input type="number" id="qc-interval" value="${S?.qcInterval||16}" min="4" max="40"></div>
     </div>
-    <div class="g4">
-      <div class="field"><label>Pre-blanks</label><input type="number" id="pre-blanks" value="${S?.preBlanks||3}" min="1"></div>
-      <div class="field"><label>Post-blanks</label><input type="number" id="post-blanks" value="${S?.postBlanks||3}" min="1"></div>
-      <div class="field"><label>Blank vial (R:__)</label><input type="text" id="blank-pos" value="${S?.blankRaw||'A1'}"></div>
-      <div class="field"><label>QC vial (R:__)</label><input type="text" id="qc-pos" value="${S?.qcRaw||'B1'}"></div>
-    </div>
-    <div class="cb"><input type="checkbox" id="mode-pos" ${S?.modePos!==false?'checked':''}><label style="margin:0">Positive mode</label></div>
-    <div class="cb"><input type="checkbox" id="mode-neg" ${S?.modeNeg!==false?'checked':''}><label style="margin:0">Negative mode — same well, consecutive injection</label></div>
-    <div class="cb"><input type="checkbox" id="has-shutdown" ${S?.hasShutdown!==false?'checked':''}><label style="margin:0">Shutdown at end (RP method)</label></div>
+    <div class="note" style="margin-top:6px;margin-bottom:0;font-size:11px">Blank/QC interval, pre/post-blanks, blank/QC vial position, injection mode and shutdown are set on <strong>Step 4 → LCMS plate layout</strong> instead — they only affect the submission file, so editing them there doesn't reset your plate edits.</div>
   </div>
 
   <div class="card">
@@ -425,22 +416,27 @@ function loadDemo(){
 }
 
 function getS(){
-  const blankRaw=(document.getElementById('blank-pos').value||'A1').trim().toUpperCase().replace(/^[A-Z]:/,'');
-  const qcRaw=(document.getElementById('qc-pos').value||'B1').trim().toUpperCase().replace(/^[A-Z]:/,'');
+  // Blank/QC interval, pre/post-blanks, blank/QC vial position, injection
+  // mode and shutdown live on the LCMS plate layout page (edited directly
+  // via updateRunSetting()/updateBlankQcVial() into the live S object) —
+  // regenerating here must carry those forward from the current S rather
+  // than re-reading Setup-page DOM fields that no longer exist.
   const vhColor=document.getElementById('vh-color').value;
+  const blankRaw=S?.blankRaw||'A1';
+  const qcRaw=S?.qcRaw||'B1';
   return{
     date:document.getElementById('run-date').value.trim(),
     col:document.getElementById('col-type').value,
     plateColor:document.getElementById('plate-color').value,
     vhColor,
-    qcInterval:parseInt(document.getElementById('qc-interval').value)||16,
-    preBlanks:parseInt(document.getElementById('pre-blanks').value)||3,
-    postBlanks:parseInt(document.getElementById('post-blanks').value)||3,
+    qcInterval:S?.qcInterval??16,
+    preBlanks:S?.preBlanks??3,
+    postBlanks:S?.postBlanks??3,
     blankRaw,qcRaw,
     blankPos:vhColor+':'+blankRaw, qcPos:vhColor+':'+qcRaw,
-    modePos:document.getElementById('mode-pos').checked,
-    modeNeg:document.getElementById('mode-neg').checked,
-    hasShutdown:document.getElementById('has-shutdown').checked,
+    modePos:S?.modePos??true,
+    modeNeg:S?.modeNeg??true,
+    hasShutdown:S?.hasShutdown??true,
     hasPBS:document.getElementById('has-pbs').checked,
     hasDmsoCtrl:document.getElementById('has-dmso-ctrl').checked,
     calReps:parseInt(document.getElementById('cal-reps').value)||2,
@@ -548,13 +544,14 @@ function buildLcmsFromCollect(){
     }
     return S.vhColor+':?';
   }
+  // Calibration standards are injected as one mixed vial per concentration
+  // level (all test compounds combined), not one vial per compound.
+  const calMixCpds=compounds.filter(x=>x.type==='test').map(x=>x.abbr);
   if(S.calLoc==='vial'){
-    for(const c of compounds.filter(x=>x.type==='test')){
-      for(const conc of S.calConcs){
-        const pos=nextCalVial();
-        const p=vhParse(pos.replace(S.vhColor+':',''));
-        if(p) vialHolder[p[0]][p[1]]={stype:'cal',cpd:c.abbr,conc,label:`${c.abbr}_${conc}`};
-      }
+    for(const conc of S.calConcs){
+      const pos=nextCalVial();
+      const p=vhParse(pos.replace(S.vhColor+':',''));
+      if(p) vialHolder[p[0]][p[1]]={stype:'cal',cpd:'MIX',mix:calMixCpds,conc,label:`CalMix_${conc}`};
     }
   }
 
@@ -573,10 +570,9 @@ function buildLcmsFromCollect(){
   // cal-on-plate rows
   function calPlateCells(){
     const out=[];
-    for(const c of compounds.filter(x=>x.type==='test'))
-      for(const conc of S.calConcs)
-        for(let rep=1;rep<=S.calReps;rep++)
-          out.push({stype:'cal',cpd:c.abbr,conc,rep,label:`${c.abbr}_${conc}_${rep}`});
+    for(const conc of S.calConcs)
+      for(let rep=1;rep<=S.calReps;rep++)
+        out.push({stype:'cal',cpd:'MIX',mix:calMixCpds,conc,rep,label:`CalMix_${conc}_${rep}`});
     return out;
   }
 
@@ -628,7 +624,10 @@ function cellSt(cell){
   if(cell.stype==='balance') return{cls:'w-bal',txt:'balance',tip:''};
   if(cell.stype==='dmso') return{cls:'w-dm',txt:`DMSO<br>D${cell.donor}<br>r${cell.rep}${cell.tp!=null?' '+cell.tp+'h':''}`,tip:cell.label};
   if(cell.stype==='pbs') return{cls:'w-pbs',txt:`${cell.cpd}<br>PBS r${cell.rep}${cell.tp!=null?'<br>'+cell.tp+'h':''}`,tip:cell.label};
-  if(cell.stype==='cal') return{cls:'w-cal',txt:`${cell.cpd}<br>${cell.conc}${cell.rep?'<br>r'+cell.rep:''}`,tip:cell.label||''};
+  if(cell.stype==='cal'){
+    const tip=cell.mix&&cell.mix.length?`${cell.label||''} — mix: ${cell.mix.join('+')}`:(cell.label||'');
+    return{cls:'w-cal',txt:`${cell.cpd}<br>${cell.conc}${cell.rep?'<br>r'+cell.rep:''}`,tip};
+  }
   if(cell.stype==='sample'){const{bg,fg}=donorBg(cell.donor);return{cls:'',style:`background:${bg};color:${fg}`,txt:`${cell.cpd}<br>D${cell.donor}<br>r${cell.rep}${cell.tp!=null?' '+cell.tp+'h':''}`,tip:cell.label};}
   return{cls:'w-e',txt:'',tip:''};
 }
@@ -953,11 +952,11 @@ function updateToolbar(){
 }
 
 function renderVHToolbar(){
-  const cpdOpts=compounds.filter(x=>x.type==='test').map(c=>c.abbr);
+  const testAbbrs=compounds.filter(x=>x.type==='test').map(c=>c.abbr);
   let palette=`<span class="et-chip" style="background:#e5e7eb;border-color:#d1d5db" onclick="applyToVH({type:'blank'})">blank</span>`;
   palette+=`<span class="et-chip" style="background:#d1fae5;border-color:#a7f3d0" onclick="applyToVH({type:'qc'})">QC</span>`;
   palette+=`<span class="et-chip" style="background:#1e1e1e;color:#fff" onclick="applyToVH({type:'shutdown'})">shutdown</span>`;
-  cpdOpts.forEach(c=>palette+=`<span class="et-chip compound" onclick="applyToVHCal('${c}')">${c} cal</span>`);
+  if(testAbbrs.length) palette+=`<span class="et-chip compound" onclick="applyToVHCalMix()">cal mix</span>`;
   return `<div class="editor-toolbar" id="editor-toolbar-vh" style="opacity:.5;margin-bottom:14px">
     <div class="et-row">
       ${undoRedoButtons()}
@@ -971,13 +970,14 @@ function renderVHToolbar(){
       <span class="et-label">Apply</span>
       <div class="et-palette">${palette}</div>
     </div>
-    <div class="et-hint">${moveMode?"Move mode: drag a vial's content to another vial or plate well to relocate it.":"Drag to select vials, click a row/col header for a whole row/col, then click a chip. Double-click a vial to set compound+concentration for calibration. Ctrl+C / Ctrl+V copies and pastes vial contents too."}</div>
+    <div class="et-hint">${moveMode?"Move mode: drag a vial's content to another vial or plate well to relocate it.":"Drag to select vials, click a row/col header for a whole row/col, then click a chip. \"cal mix\" injects all test compounds together as one mixed standard at the given concentration — double-click a vial to set its concentration. Ctrl+C / Ctrl+V copies and pastes vial contents too."}</div>
   </div>`;
 }
-function applyToVHCal(cpd){
-  const conc=prompt('Concentration for '+cpd+' (e.g. 100):','100');
+function applyToVHCalMix(){
+  const conc=prompt('Concentration for the calibration mix (e.g. 100):','100');
   if(conc===null) return;
-  applyToVH({type:'cal',cpd,conc});
+  const mix=compounds.filter(x=>x.type==='test').map(c=>c.abbr);
+  applyToVH({type:'cal',cpd:'MIX',mix,conc});
 }
 
 function renderToolbar(kind){
@@ -1217,10 +1217,13 @@ function countDwWellTypes(){
       const cell=p.grid[r][c];
       if(!cell) continue;
       if(cell.stype==='water'){counts.water++;continue;}
+      // Classify by row (donor vs PBS) and column (real compound vs DMSO ctrl)
+      // independently — `stype` alone can't distinguish a DMSO-column well in
+      // a PBS row from a real-compound well in a PBS row (both are 'pbs').
       const isPbsRow=cell.donor==='PBS';
-      if(cell.stype==='dmso'){ isPbsRow?counts.dmsoPBS++:counts.dmsoFS++; }
-      else if(cell.stype==='pbs'){ counts.samplePBS++; } // pbs stype = PBS row + real compound col
-      else if(cell.stype==='sample'){ counts.sampleFS++; }
+      const isDmsoCol=cell.cpd==='DMSO';
+      if(isPbsRow){ isDmsoCol?counts.dmsoPBS++:counts.samplePBS++; }
+      else{ isDmsoCol?counts.dmsoFS++:counts.sampleFS++; }
     }
   });
   return counts;
@@ -1382,6 +1385,7 @@ function computeMeohCalc(){
    ===================================================================== */
 function renderLpView(){
   let h=renderToolbar('lp');
+  h+=renderRunSettings();
   h+=`<div class="note">Autosampler has 4 physical slots (R/B/Y/G). Vial holder occupies slot <strong>${S.vhColor}</strong> — LCMS plates rotate through the remaining ${availableLcmsColors().length} slots: ${availableLcmsColors().join(', ')}.</div>`;
   h+=`<div class="psec"><div class="phr"><span class="pn">Vial holder (${S.vhColor}:)</span>
     <span style="font-size:11px;color:var(--t3)">6 rows A–F × 9 cols 1–9</span></div>
@@ -1409,6 +1413,59 @@ function renderLpView(){
 }
 
 /* =====================================================================
+   INJECTION SEQUENCE SETTINGS — blank/QC interval, pre/post-blanks,
+   blank/QC vial position, injection mode, shutdown. These only feed
+   buildSubmissionSequence() (computed live from S on every render of the
+   Submission view) — none of them affect deepwell/collect/LCMS plate
+   layout, so editing them here writes straight into the live S object
+   instead of going through Generate, which would reset plate edits.
+   ===================================================================== */
+function renderRunSettings(){
+  return `<div class="card" id="run-settings" style="margin-bottom:16px">
+    <h3>Injection sequence settings</h3>
+    <div class="note" style="margin-bottom:10px">Only affects the submission file — editing these does <strong>not</strong> reset your deepwell/collect/LCMS plate edits.</div>
+    <div class="g4">
+      <div class="field"><label>Blank/QC interval</label><input type="number" id="rs-qc-interval" value="${S.qcInterval}" min="4" max="40" onchange="updateRunSetting('qcInterval',this.value,'int')"></div>
+      <div class="field"><label>Pre-blanks</label><input type="number" id="rs-pre-blanks" value="${S.preBlanks}" min="1" onchange="updateRunSetting('preBlanks',this.value,'int')"></div>
+      <div class="field"><label>Post-blanks</label><input type="number" id="rs-post-blanks" value="${S.postBlanks}" min="1" onchange="updateRunSetting('postBlanks',this.value,'int')"></div>
+      <div></div>
+    </div>
+    <div class="g2">
+      <div class="field"><label>Blank vial (R:__)</label><input type="text" id="rs-blank-pos" value="${S.blankRaw}" onchange="updateBlankQcVial('blank',this.value)"></div>
+      <div class="field"><label>QC vial (R:__)</label><input type="text" id="rs-qc-pos" value="${S.qcRaw}" onchange="updateBlankQcVial('qc',this.value)"></div>
+    </div>
+    <div class="cb"><input type="checkbox" id="rs-mode-pos" ${S.modePos!==false?'checked':''} onchange="updateRunSetting('modePos',this.checked,'bool')"><label style="margin:0">Positive mode</label></div>
+    <div class="cb"><input type="checkbox" id="rs-mode-neg" ${S.modeNeg!==false?'checked':''} onchange="updateRunSetting('modeNeg',this.checked,'bool')"><label style="margin:0">Negative mode — same well, consecutive injection</label></div>
+    <div class="cb"><input type="checkbox" id="rs-has-shutdown" ${S.hasShutdown!==false?'checked':''} onchange="updateRunSetting('hasShutdown',this.checked,'bool')"><label style="margin:0">Shutdown at end (RP method)</label></div>
+  </div>`;
+}
+function updateRunSetting(field,val,type){
+  if(!S) return;
+  S[field]=type==='int'?(parseInt(val)||0):(type==='bool'?!!val:val);
+  scheduleSave();
+}
+function updateBlankQcVial(kind,rawVal){
+  if(!S) return;
+  const raw=(rawVal||'').trim().toUpperCase().replace(/^[A-Z]:/,'');
+  if(!/^[A-F][1-9]$/.test(raw)){ flashToast('Invalid vial position — expected like A1'); refreshCurrentView(); return; }
+  const vhParse=rw=>{const m=rw.match(/^([A-F])(\d)$/);return m?[m[1].charCodeAt(0)-65,parseInt(m[2])-1]:null;};
+  const newP=vhParse(raw);
+  if(vialHolder[newP[0]][newP[1]]&&vialHolder[newP[0]][newP[1]]!==kind){
+    flashToast('That vial is already occupied — pick another position');
+    refreshCurrentView();
+    return;
+  }
+  pushUndo();
+  const oldRaw=kind==='blank'?S.blankRaw:S.qcRaw;
+  const oldP=vhParse(oldRaw);
+  if(oldP&&vialHolder[oldP[0]]&&vialHolder[oldP[0]][oldP[1]]===kind) vialHolder[oldP[0]][oldP[1]]=null;
+  vialHolder[newP[0]][newP[1]]=kind;
+  if(kind==='blank'){ S.blankRaw=raw; S.blankPos=S.vhColor+':'+raw; }
+  else{ S.qcRaw=raw; S.qcPos=S.vhColor+':'+raw; }
+  refreshCurrentView();
+}
+
+/* =====================================================================
    CALIBRATION LINE CALCULATOR
    Standalone — not tied to well volumes. For each test compound, serial-
    dilutes the DMSO stock down to each calibration concentration at a
@@ -1419,7 +1476,7 @@ function renderCalLineCalculator(){
   const cpdOpts=testCpds.map(c=>`<option value="${c.abbr}">${c.abbr} (${c.stockConc||10} ${c.stockUnit||'mM'})</option>`).join('');
   return `<div class="card" id="cal-calc" style="margin-top:20px">
     <h3>📏 Calibration line preparation calculator — serial dilution</h3>
-    <div class="note" style="margin-bottom:10px">Independent of well volumes. Starts from the DMSO stock at the <strong>highest</strong> calibration concentration, then each lower point is diluted from the previous point's prepared solution (true serial dilution chain) rather than back-calculated from stock each time.</div>
+    <div class="note" style="margin-bottom:10px">Independent of well volumes. Starts from the DMSO stock at the <strong>highest</strong> calibration concentration, then each lower point is diluted from the previous point's prepared solution (true serial dilution chain) rather than back-calculated from stock each time. Calibration standards are injected as a single <strong>mixed</strong> vial per concentration level (all test compounds combined) — run this calculator once per compound to work out how much of each to spike into that shared mix vial.</div>
     <div class="g3">
       <div class="field"><label>Compound</label><select id="cal-calc-cpd">${cpdOpts}</select></div>
       <div class="field"><label>Final volume per cal point (µL)</label><input type="number" id="cal-calc-vol" value="500"></div>
@@ -1496,7 +1553,7 @@ function renderVH(){
       if(cell==='blank'){cls='w-bl';txt='blank';tip=S.blankPos;}
       else if(cell==='qc'){cls='w-qc';txt='QC';tip=S.qcPos;}
       else if(cell==='cal-reserved'){cls='w-cal';txt='cal';}
-      else if(cell&&cell.stype==='cal'){cls='w-cal';txt=`${cell.cpd}<br>${cell.conc}`;tip=cell.label;}
+      else if(cell&&cell.stype==='cal'){cls='w-cal';txt=`${cell.cpd}<br>${cell.conc}`;tip=cell.mix&&cell.mix.length?`${cell.label||''} — mix: ${cell.mix.join('+')}`:cell.label;}
       else if(cell&&cell.stype==='shutdown'){cls='w-sd';txt='shut-<br>down';}
       h+=`<div class="well ${cls}${isSel?' selected':''}"
             data-r="${r}" data-c="${c}"
@@ -1531,18 +1588,18 @@ function openVHEditor(e,r,c){
   pop.className='well-pop';
   pop.style.left=(e.pageX+8)+'px';
   pop.style.top=(e.pageY+8)+'px';
-  const cpdOpts=compounds.filter(x=>x.type==='test').map(cc=>`<option value="${cc.abbr}" ${cell?.cpd===cc.abbr?'selected':''}>${cc.abbr}</option>`).join('');
+  const testAbbrs=compounds.filter(x=>x.type==='test').map(cc=>cc.abbr);
   pop.innerHTML=`
     <div class="wp-row"><select id="vhp-type">
       <option value="">— empty —</option>
       <option value="blank" ${cell==='blank'?'selected':''}>blank</option>
       <option value="qc" ${cell==='qc'?'selected':''}>QC</option>
-      <option value="cal" ${cell&&cell.stype==='cal'?'selected':''}>calibration</option>
+      <option value="cal" ${cell&&cell.stype==='cal'?'selected':''}>calibration mix</option>
       <option value="shutdown" ${cell&&cell.stype==='shutdown'?'selected':''}>shutdown</option>
     </select></div>
     <div class="wp-row" id="vhp-cal-fields" style="display:${cell&&cell.stype==='cal'?'flex':'none'}">
-      <select id="vhp-cpd" style="width:90px">${cpdOpts}</select>
-      <input type="text" id="vhp-conc" placeholder="conc" value="${cell?.conc||''}" style="width:60px">
+      <input type="text" id="vhp-conc" placeholder="conc" value="${cell?.conc||''}" style="width:70px">
+      <span style="font-size:10px;color:var(--t3);align-self:center">mix: ${testAbbrs.join('+')||'—'}</span>
     </div>
     <div class="wp-row">
       <button class="btn btn-sm" onclick="saveVHEdit(${r},${c})">Save</button>
@@ -1562,9 +1619,9 @@ function saveVHEdit(r,c){
   else if(type==='qc') vialHolder[r][c]='qc';
   else if(type==='shutdown') vialHolder[r][c]={stype:'shutdown'};
   else if(type==='cal'){
-    const cpd=document.getElementById('vhp-cpd').value;
     const conc=document.getElementById('vhp-conc').value;
-    vialHolder[r][c]={stype:'cal',cpd,conc,label:`${cpd}_${conc}`};
+    const mix=compounds.filter(x=>x.type==='test').map(x=>x.abbr);
+    vialHolder[r][c]={stype:'cal',cpd:'MIX',mix,conc,label:`CalMix_${conc}`};
   }
   document.querySelectorAll('.well-pop').forEach(p=>p.remove());
   refreshCurrentView();
@@ -1580,8 +1637,10 @@ function applyToVH(patch){
     else if(patch.type==='qc') vialHolder[r][c]='qc';
     else if(patch.type==='shutdown') vialHolder[r][c]={stype:'shutdown'};
     else if(patch.type==='cal'){
-      const cpd=patch.cpd||compounds.find(x=>x.type==='test')?.abbr||'cpd';
-      vialHolder[r][c]={stype:'cal',cpd,conc:patch.conc||'100',label:`${cpd}_${patch.conc||'100'}`};
+      const cpd=patch.cpd||'MIX';
+      const mix=patch.mix||compounds.filter(x=>x.type==='test').map(x=>x.abbr);
+      const conc=patch.conc||'100';
+      vialHolder[r][c]={stype:'cal',cpd,mix,conc,label:cpd==='MIX'?`CalMix_${conc}`:`${cpd}_${conc}`};
     }
   });
   refreshCurrentView();
@@ -2062,7 +2121,7 @@ function plateToTable(grid,rows,cols,rowLabels,colLabels){
       if(cell){
         if(cell.stype==='water') txt='H₂O';
         else if(cell.stype==='balance') txt='balance';
-        else if(cell.stype==='cal') txt=`${cell.cpd||''} ${cell.conc||''}${cell.rep?' r'+cell.rep:''}`;
+        else if(cell.stype==='cal') txt=`${cell.mix&&cell.mix.length?'Mix('+cell.mix.join('+')+')':(cell.cpd||'')} ${cell.conc||''}${cell.rep?' r'+cell.rep:''}`;
         else if(cell==='blank') txt='blank';
         else if(cell==='qc') txt='QC';
         else if(cell==='cal-reserved') txt='cal';
