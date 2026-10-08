@@ -101,17 +101,17 @@ input:focus,select:focus{border-color:var(--ac)}
 .pn{font-size:13px;font-weight:600}
 .pcb{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px}
 .pgw{overflow-x:auto;-webkit-user-select:none}
-.pg96{display:grid;grid-template-columns:18px repeat(12,minmax(calc(38px * var(--well-scale,1)),1fr));gap:2px;min-width:calc(520px * var(--well-scale,1));position:relative;touch-action:none}
-.pgvial{display:grid;grid-template-columns:18px repeat(9,minmax(calc(46px * var(--well-scale,1)),1fr));gap:2px;min-width:calc(460px * var(--well-scale,1));touch-action:none}
-.xh{display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;color:var(--t3);height:16px;cursor:pointer}
+.pg96{display:grid;grid-template-columns:22px repeat(12,minmax(calc(52px * var(--well-scale,1)),1fr));gap:2px;min-width:calc(680px * var(--well-scale,1));position:relative;touch-action:none}
+.pgvial{display:grid;grid-template-columns:22px repeat(9,minmax(calc(60px * var(--well-scale,1)),1fr));gap:2px;min-width:calc(580px * var(--well-scale,1));touch-action:none}
+.xh{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--t3);height:20px;cursor:pointer}
 .xh:hover{color:var(--ac)}
-.rl{display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;color:var(--t3);cursor:pointer}
+.rl{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--t3);cursor:pointer}
 .rl:hover{color:var(--ac)}
-.well{height:calc(48px * var(--well-scale,1));border:1px solid rgba(0,0,0,.08);border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:calc(9px * var(--well-scale,1));font-weight:500;text-align:center;line-height:1.25;overflow:hidden;padding:1px;position:relative;cursor:cell}
+.well{height:calc(58px * var(--well-scale,1));border:1px solid rgba(0,0,0,.08);border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:calc(12px * var(--well-scale,1));font-weight:600;text-align:center;line-height:1.3;overflow:hidden;padding:1px;position:relative;cursor:cell}
 .well.selected{outline:2px solid var(--ac);outline-offset:-1px;z-index:5}
 .well.selected::after{content:'';position:absolute;inset:0;background:rgba(37,99,235,.12)}
 .well.kfocus{box-shadow:0 0 0 2px #f59e0b,0 0 0 4px rgba(245,158,11,.25) inset;z-index:7}
-.pgvial .well{height:calc(52px * var(--well-scale,1))}
+.pgvial .well{height:calc(64px * var(--well-scale,1))}
 .well.move-target{outline:2px solid #f59e0b;outline-offset:-1px;z-index:6}
 .well.move-target::after{content:'';position:absolute;inset:0;background:rgba(245,158,11,.18)}
 .well:hover .wt{display:block}
@@ -146,12 +146,14 @@ tr.selected-row td{background:rgba(37,99,235,.08)!important}
 .rp{background:rgba(219,234,254,.4)}.rn{background:rgba(254,243,199,.4)}
 .rb{background:#f5f5f3}.rq{background:rgba(209,250,229,.4)}
 .rpr{background:rgba(254,226,226,.4)}.rs{background:#1e1e1e}.rs td{color:#e5e7eb}
+.rcal{background:rgba(233,213,255,.5)}
 .pair-top td{border-bottom:none!important}
 .pair-bot td{border-top:.5px dashed #c7d2fe!important}
 .mb{display:inline-block;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:600}
 .mp{background:#dbeafe;color:#1d4ed8}.mn{background:#fef3c7;color:#b45309}
 .mbl{background:#e5e7eb;color:#374151}.mq{background:#d1fae5;color:#065f46}
 .mpr{background:#fee2e2;color:#991b1b}.ms{background:#1e1e1e;color:#fff}
+.mcal{background:#e9d5ff;color:#7e22ce}
 .es{text-align:center;padding:60px 20px;color:var(--t3)}
 .lookup{font-size:10px;border-collapse:collapse;width:100%;margin-top:12px}
 .lookup td,.lookup th{padding:3px 8px;border:.5px solid var(--bd)}
@@ -568,11 +570,11 @@ function buildLcmsFromCollect(){
   sampleWells.sort((a,b)=>timepoints.indexOf(a.tp)-timepoints.indexOf(b.tp));
 
   // cal-on-plate rows
-  function calPlateCells(){
+  function calPlateCells(tpSuffix){
     const out=[];
     for(const conc of S.calConcs)
       for(let rep=1;rep<=S.calReps;rep++)
-        out.push({stype:'cal',cpd:'MIX',mix:calMixCpds,conc,rep,label:`CalMix_${conc}_${rep}`});
+        out.push({stype:'cal',cpd:'MIX',mix:calMixCpds,conc,rep,label:`CalMix_${conc}${tpSuffix?'_tp'+tpSuffix:''}_${rep}`});
     return out;
   }
 
@@ -594,7 +596,7 @@ function buildLcmsFromCollect(){
   let calDone=false;
   if(S.calStrat==='once'&&S.calLoc==='plate'){for(const cc of calPlateCells()) place(cc);calDone=true;}
   for(const tp of timepoints){
-    if(S.calStrat==='per-tp'&&S.calLoc==='plate') for(const cc of calPlateCells()) place(cc);
+    if(S.calStrat==='per-tp'&&S.calLoc==='plate') for(const cc of calPlateCells(tp)) place(cc);
     const tpWells=sampleWells.filter(w=>w.tp===tp);
     for(const w of tpWells) place(w);
   }
@@ -1684,43 +1686,101 @@ function buildSubmissionSequence(){
   if(S.modePos) modes.push('pos');
   if(S.modeNeg) modes.push('neg');
 
-  // Gather ordered samples directly from current LCMS plates (live!)
-  // Calibration-line wells are excluded from the submission file per requirement —
-  // they are prepared/run separately and not part of the sample injection sequence.
+  // Gather ordered samples directly from current LCMS plates (live!). Plate-based
+  // calibration wells (calLoc==='plate') are included here since they physically
+  // sit on the plate in the position generation already put them (start, or
+  // before each timepoint block, per S.calStrat) — no separate handling needed.
   const orderedSamples=[];
   lcmsPlates.forEach((lp,pi)=>{
     for(let r=0;r<8;r++) for(let c=0;c<12;c++){
       const cell=lp.grid[r][c];
-      if(cell&&cell.stype!=='water'&&cell.stype!=='empty'&&cell.stype!=='cal'){
+      if(cell&&cell.stype!=='water'&&cell.stype!=='empty'){
         orderedSamples.push({...cell,position:lp.color+':'+R8[r]+(c+1)});
       }
     }
   });
 
+  // Vial-based calibration mix (calLoc==='vial'): each concentration is prepared
+  // once as a single vial (all test compounds mixed together), but may be
+  // injected multiple times per S.calStrat — once at the start, or once before
+  // each timepoint block. `suffix` keeps repeated injections' file names unique.
+  function calVialRows(suffix){
+    const vials=[];
+    for(let r=0;r<6;r++) for(let c=0;c<9;c++){
+      const cell=vialHolder[r][c];
+      if(cell&&cell.stype==='cal') vials.push({...cell,position:S.vhColor+':'+R6[r]+(c+1)});
+    }
+    vials.sort((a,b)=>{
+      const ia=S.calConcs.indexOf(String(a.conc)),ib=S.calConcs.indexOf(String(b.conc));
+      if(ia===-1&&ib===-1) return 0;
+      if(ia===-1) return 1;
+      if(ib===-1) return -1;
+      return ia-ib;
+    });
+    const rows=[];
+    for(const v of vials) for(const m of modes)
+      rows.push({stype:'cal',mode:m,label:`${v.label||('CalMix_'+v.conc)}${suffix}`,isVial:true,position:v.position});
+    return rows;
+  }
+
   const final=[];
-  let sCount=0,midBC=0,midQC=0;
+  let sCount=0,midBC=0,midQC=0,lastCalTp=undefined,calBC=0,calQC=0;
+
+  // Note: `label` never embeds the mode — the file name already gets it from
+  // the `${S.col}${m}` prefix in buildDisplayRows(), so appending it here too
+  // would print it twice (e.g. "Rppos_..._pos").
+
+  // Every calibration block (however many concentrations/reps it contains) is
+  // bracketed by its own blank+QC, same as a periodic mid-run check — so the
+  // instrument is verified clean/on-spec immediately before and after standards.
+  function calBracket(){
+    calBC++;calQC++;
+    const rows=[];
+    for(const m of modes) rows.push({stype:'blank-mid',mode:m,label:`blank_cal_${calBC}`,isVial:true,position:S.blankPos});
+    for(const m of modes) rows.push({stype:'qc-mid',mode:m,label:`qc_cal_${calQC}`,isVial:true,position:S.qcPos});
+    return rows;
+  }
 
   // Pre-blanks: pos then neg adjacent for each pre-blank index
   for(let i=1;i<=S.preBlanks;i++) for(const m of modes)
-    final.push({stype:'preblank',mode:m,label:`pre_blank_${m}_${i}`,isVial:true,position:S.blankPos});
+    final.push({stype:'preblank',mode:m,label:`pre_blank_${i}`,isVial:true,position:S.blankPos});
 
+  if(S.calLoc==='vial'&&S.calStrat==='once'){
+    final.push(...calBracket());
+    final.push(...calVialRows(''));
+    final.push(...calBracket());
+  }
+
+  let inPlateCalBlock=false;
   for(const smp of orderedSamples){
     const isSmp=['sample','dmso','pbs'].includes(smp.stype);
+    const isCal=smp.stype==='cal';
+    if(S.calLoc==='vial'&&S.calStrat==='per-tp'&&isSmp&&smp.tp!==lastCalTp){
+      final.push(...calBracket());
+      final.push(...calVialRows('_tp'+(smp.tp??'0')));
+      final.push(...calBracket());
+      lastCalTp=smp.tp;
+    }
+    // Plate-based cal wells sit inline in orderedSamples already, in whatever
+    // contiguous run generation placed them — bracket each run as it's seen.
+    if(isCal&&!inPlateCalBlock){ final.push(...calBracket()); inPlateCalBlock=true; }
+    else if(!isCal&&inPlateCalBlock){ final.push(...calBracket()); inPlateCalBlock=false; }
     if(isSmp&&sCount>0&&sCount%S.qcInterval===0){
       midBC++;
       for(const m of modes)
-        final.push({stype:'blank-mid',mode:m,label:`blank_${m}_${midBC}`,isVial:true,position:S.blankPos});
+        final.push({stype:'blank-mid',mode:m,label:`blank_${midBC}`,isVial:true,position:S.blankPos});
       midQC++;
       for(const m of modes)
-        final.push({stype:'qc-mid',mode:m,label:`qc_${m}_${midQC}`,isVial:true,position:S.qcPos});
+        final.push({stype:'qc-mid',mode:m,label:`qc_${midQC}`,isVial:true,position:S.qcPos});
     }
     for(const m of modes)
-      final.push({...smp,mode:m,label:`${smp.label}_${m}`,position:smp.position});
+      final.push({...smp,mode:m,label:smp.label,position:smp.position});
     if(isSmp) sCount++;
   }
+  if(inPlateCalBlock) final.push(...calBracket());
 
   for(let i=1;i<=S.postBlanks;i++) for(const m of modes)
-    final.push({stype:'postblank',mode:m,label:`post_blank_${m}_${i}`,isVial:true,position:S.blankPos});
+    final.push({stype:'postblank',mode:m,label:`post_blank_${i}`,isVial:true,position:S.blankPos});
 
   // Shutdown draws from the same blank vial (per requirement) rather than a fresh vial slot
   if(S.hasShutdown){
@@ -1921,6 +1981,7 @@ function renderSubView(){
       else if(inj.stype==='blank-mid'){rc='rb';badge=`<span class="mb mbl">blank</span>`;ts='blank (mid)';}
       else if(inj.stype==='qc-mid'){rc='rq';badge=`<span class="mb mq">QC</span>`;ts='QC';}
       else if(inj.stype==='shutdown'){rc='rs';badge=`<span class="mb ms">shutdown</span>`;methDefault=SHUT;}
+      else if(inj.stype==='cal'){rc='rcal';badge=`<span class="mb mcal">cal mix</span>`;ts='calibration';}
       else{rc=m==='pos'?'rp':'rn';badge=`<span class="mb ${m==='pos'?'mp':'mn'}">${m}</span>`;}
     }
     const methVal=r.method||methDefault;
@@ -1957,7 +2018,7 @@ function renderSubView(){
     <span class="live-badge"><span class="live-dot"></span>synced live from LCMS plate layout</span>
   </div>
   ${dupWarning}
-  <div class="note" style="margin-bottom:10px">Same position in consecutive rows = pos then neg on the same well. File name, position, and method are all directly editable. Use the checkboxes + row buttons below to copy/delete/insert rows. Manually edited rows are marked ●. Calibration-line wells are excluded from this file by design.</div>
+  <div class="note" style="margin-bottom:10px">Same position in consecutive rows = pos then neg on the same well. File name, position, and method are all directly editable. Use the checkboxes + row buttons below to copy/delete/insert rows. Manually edited rows are marked ●. Calibration mix injections (purple rows) are included per the "When to inject" setting from Step 1.</div>
   <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
     ${undoRedoButtons()}
     <div class="et-sep"></div>
