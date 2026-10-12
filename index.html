@@ -147,6 +147,10 @@ tr.selected-row td{background:rgba(37,99,235,.08)!important}
 .rb{background:#f5f5f3}.rq{background:rgba(209,250,229,.4)}
 .rpr{background:rgba(254,226,226,.4)}.rs{background:#1e1e1e}.rs td{color:#e5e7eb}
 .rcal{background:rgba(233,213,255,.5)}
+.cpd-handle{cursor:grab;color:var(--t3);font-size:14px;padding:0 4px;user-select:none}
+.cpd-handle:hover{color:var(--ac)}
+#compounds-list tr.cpd-drop-before td{box-shadow:inset 0 2px 0 var(--ac)}
+#compounds-list tr.cpd-drop-after td{box-shadow:inset 0 -2px 0 var(--ac)}
 .pair-top td{border-bottom:none!important}
 .pair-bot td{border-top:.5px dashed #c7d2fe!important}
 .mb{display:inline-block;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:600}
@@ -364,8 +368,9 @@ function rdC(){
   if(!el) return;
   el.innerHTML=compounds.length===0
     ? '<tr><td colspan="7" style="color:var(--t3);text-align:center;padding:10px;font-size:11px">No compounds yet — add one below.</td></tr>'
-    : compounds.map((c,i)=>`<tr>
+    : compounds.map((c,i)=>`<tr data-cpd-idx="${i}" ondragstart="cpdDragStart(event,${i})" ondragover="cpdDragOver(event,${i})" ondragleave="this.classList.remove('cpd-drop-before','cpd-drop-after')" ondrop="cpdDrop(event,${i})" ondragend="cpdDragEnd()">
         <td style="border-left:3px solid ${CPD_TYPE_COLOR[c.type]||'#94a3b8'};white-space:nowrap;padding-left:6px">
+          <span class="cpd-handle" title="Drag to reorder" onmousedown="this.closest('tr').draggable=true" onmouseup="this.closest('tr').draggable=false">⠿</span>
           <button class="btn btn-sm" style="padding:1px 5px" onclick="moveCompound(${i},-1)" ${i===0?'disabled':''} title="Move up">▲</button>
           <button class="btn btn-sm" style="padding:1px 5px" onclick="moveCompound(${i},1)" ${i===compounds.length-1?'disabled':''} title="Move down">▼</button>
         </td>
@@ -398,6 +403,38 @@ function updateCompoundField(i,field,val){
   else if(field==='targetConc') compounds[i][field]=val===''?'':(parseFloat(val)||'');
   else compounds[i][field]=val;
   scheduleSave();
+}
+let cpdDragFrom=null;
+function cpdDragStart(e,i){
+  cpdDragFrom=i;
+  e.dataTransfer.effectAllowed='move';
+  try{e.dataTransfer.setData('text/plain',String(i));}catch(err){}
+}
+function cpdDragOver(e,i){
+  if(cpdDragFrom===null) return;
+  e.preventDefault();
+  const tr=e.currentTarget,rect=tr.getBoundingClientRect();
+  const after=e.clientY>rect.top+rect.height/2;
+  tr.classList.toggle('cpd-drop-before',!after);
+  tr.classList.toggle('cpd-drop-after',after);
+}
+function cpdDrop(e,i){
+  if(cpdDragFrom===null) return;
+  e.preventDefault();
+  const rect=e.currentTarget.getBoundingClientRect();
+  let to=e.clientY>rect.top+rect.height/2?i+1:i; // insertion index before removal
+  const from=cpdDragFrom;
+  if(from<to) to--;
+  cpdDragFrom=null;
+  if(to!==from){
+    const[item]=compounds.splice(from,1);
+    compounds.splice(to,0,item);
+  }
+  rdC();
+}
+function cpdDragEnd(){
+  cpdDragFrom=null;
+  document.querySelectorAll('#compounds-list tr').forEach(tr=>{tr.draggable=false;tr.classList.remove('cpd-drop-before','cpd-drop-after');});
 }
 function moveCompound(i,dir){
   const j=i+dir;
@@ -517,14 +554,17 @@ function generate(){
   }
   // Build collect plates (per timepoint, mirrors deepwell groupings, no water)
   cpPlates=[];
+  // The trailing DMSO control column on the deepwell plate is the matrix control:
+  // it is not collected, so collect/LCMS plates only carry the leading DMSO column.
   for(const tp of timepoints){
     for(const dwp of dwPlates){
-      cpPlates.push({id:nextCpId++,grid:makeGrid(dwp.rowGroups,dwp.cols,tp,false),rowGroups:dwp.rowGroups,cols:dwp.cols,tp,label:'Collect plate'});
+      const cpCols=dwp.cols.filter((col,i)=>!(S.hasDmsoCtrl&&col.type==='dmso'&&i===dwp.cols.length-1&&i>0));
+      cpPlates.push({id:nextCpId++,grid:makeGrid(dwp.rowGroups,cpCols,tp,false),rowGroups:dwp.rowGroups,cols:cpCols,tp,label:'Collect plate'});
     }
   }
   if(cpPlates.length%2!==0) cpPlates.push({id:nextCpId++,grid:emptyGrid(),rowGroups:[],cols:[],isBalance:true,tp:null,label:'Balance plate'});
 
-  // Build LCMS plates by packing all non-empty collect wells row-by-row
+  // Build LCMS plates by packing collect-plate replicate blocks (3 wells each) column by column
   buildLcmsFromCollect();
 
   ['dw','cp','lp','sub'].forEach(n=>document.getElementById('nav-'+n).classList.add('done'));
@@ -557,50 +597,85 @@ function buildLcmsFromCollect(){
     }
   }
 
-  // gather sample wells in order: tp -> collect plate -> row -> col
-  const sampleWells=[];
-  cpPlates.forEach((plate,pi)=>{
+  // LCMS layout mirrors the collect plate: every collect-plate row (one replicate
+  // of one donor, one well per compound column) becomes one LCMS row, with the
+  // same column order, starting at A1 with no blank rows/columns. Rows are
+  // stacked continuously and run on from H of one plate to A of the next, so a
+  // donor's 3 replicate rows stay adjacent and each LCMS column is one compound.
+  // If a few rows would spill onto an extra plate, they are wrapped into the
+  // unused right-hand columns instead (see the overflow step below).
+  // Each placed well gets a `seq` so injection order follows this layout order.
+  const lineByTp={}; // tp -> [[{cell,col}]]
+  let minCol=99,maxCol=-1;
+  cpPlates.forEach(plate=>{
     if(plate.isBalance) return;
-    for(let r=0;r<8;r++) for(let c=0;c<12;c++){
-      const cell=plate.grid[r][c];
-      if(cell&&cell.stype!=='water') sampleWells.push({...cell});
+    for(let r=0;r<8;r++){
+      const line=[];
+      for(let c=0;c<12;c++){
+        const cell=plate.grid[r][c];
+        if(cell&&cell.stype!=='water'){line.push({cell:{...cell},col:c});minCol=Math.min(minCol,c);maxCol=Math.max(maxCol,c);}
+      }
+      if(line.length) (lineByTp[line[0].cell.tp]=lineByTp[line[0].cell.tp]||[]).push(line);
     }
   });
-  // sort by timepoint order matching `timepoints` array
-  sampleWells.sort((a,b)=>timepoints.indexOf(a.tp)-timepoints.indexOf(b.tp));
+  const rowW=maxCol>=minCol?maxCol-minCol+1:12; // width of one LCMS row
+  Object.values(lineByTp).forEach(lines=>lines.forEach(line=>line.forEach(x=>{x.col-=minCol;})));
 
-  // cal-on-plate rows
-  function calPlateCells(tpSuffix){
-    const out=[];
+  // cal-on-plate: all of a block's wells run on in rows of the same width
+  function calPlateLines(tpSuffix){
+    const cells=[];
     for(const conc of S.calConcs)
       for(let rep=1;rep<=S.calReps;rep++)
-        out.push({stype:'cal',cpd:'MIX',mix:calMixCpds,conc,rep,label:`CalMix_${conc}${tpSuffix?'_tp'+tpSuffix:''}_${rep}`});
-    return out;
+        cells.push({stype:'cal',cpd:'MIX',mix:calMixCpds,conc,rep,label:`CalMix_${conc}${tpSuffix?'_tp'+tpSuffix:''}_${rep}`});
+    const lines=[];
+    for(let i=0;i<cells.length;i+=rowW) lines.push(cells.slice(i,i+rowW).map((cell,j)=>({cell,col:j})));
+    return lines;
   }
 
-  // Pack into LCMS plates row-by-row, no gaps
+  // Each timepoint is packed on its own set of plates (0h and 24h never share a
+  // plate): its rows get the fewest plates that hold every well, and any rows
+  // that don't fit the main area are wrapped into the spare right-hand columns.
   lcmsPlates=[];
-  let lpIdx=0,wellIdx=0;
-  function getLp(idx){
-    if(!lcmsPlates[idx]) lcmsPlates[idx]={id:nextLpId++,color:lcmsColorAt(idx),grid:emptyGrid(),label:'LCMS plate'};
-    return lcmsPlates[idx];
+  let seq=0;
+  const spare=12-rowW;
+  function packGroup(lines){
+    if(!lines.length) return;
+    const totalWells=lines.reduce((n,l)=>n+l.length,0);
+    let nPlates=Math.max(1,Math.ceil(totalWells/96));
+    for(;;){
+      const over=lines.slice(8*nPlates);
+      if(!over.length) break;
+      const perPlate=new Array(nPlates).fill(0);
+      over.forEach((l,j)=>{perPlate[j%nPlates]+=l.length;});
+      if(spare>0&&perPlate.every(n=>n<=8*spare)) break;
+      nPlates++;
+    }
+    const first=lcmsPlates.length;
+    for(let i=0;i<nPlates;i++) lcmsPlates.push({id:nextLpId++,color:lcmsColorAt(first+i),grid:emptyGrid(),label:'LCMS plate'});
+    const ovCount=new Array(nPlates).fill(0); // wells already wrapped into each plate's spare columns
+    lines.forEach((line,i)=>{
+      if(i<8*nPlates){
+        const lp=lcmsPlates[first+Math.floor(i/8)];
+        line.forEach(x=>{x.cell.seq=seq++;lp.grid[i%8][x.col]=x.cell;});
+      } else {
+        // overflow row: wrap row by row into the spare columns (rowW..11),
+        // spreading successive overflow rows across this group's plates in turn
+        const pi=(i-8*nPlates)%nPlates,lp=lcmsPlates[first+pi];
+        line.forEach(x=>{
+          const n=ovCount[pi]++;
+          x.cell.seq=seq++;
+          lp.grid[Math.floor(n/spare)%8][rowW+(n%spare)]=x.cell;
+        });
+      }
+    });
   }
-  function place(cellObj){
-    if(wellIdx>=96){wellIdx=0;lpIdx++;}
-    const lp=getLp(lpIdx);
-    const r=Math.floor(wellIdx/12),c=wellIdx%12;
-    lp.grid[r][c]=cellObj;
-    wellIdx++;
-  }
-
-  let calDone=false;
-  if(S.calStrat==='once'&&S.calLoc==='plate'){for(const cc of calPlateCells()) place(cc);calDone=true;}
-  for(const tp of timepoints){
-    if(S.calStrat==='per-tp'&&S.calLoc==='plate') for(const cc of calPlateCells(tp)) place(cc);
-    const tpWells=sampleWells.filter(w=>w.tp===tp);
-    for(const w of tpWells) place(w);
-  }
-  if(lcmsPlates.length===0) getLp(0); // ensure at least one plate exists
+  timepoints.forEach((tp,ti)=>{
+    const lines=[];
+    if(S.calLoc==='plate'&&((S.calStrat==='once'&&ti===0)||S.calStrat==='per-tp')) lines.push(...calPlateLines(S.calStrat==='per-tp'?tp:''));
+    lines.push(...(lineByTp[tp]||[]));
+    packGroup(lines);
+  });
+  if(lcmsPlates.length===0) lcmsPlates.push({id:nextLpId++,color:lcmsColorAt(0),grid:emptyGrid(),label:'LCMS plate'}); // always keep one plate
 }
 
 /* =====================================================================
@@ -1131,25 +1206,37 @@ function renderExposureCalculator(){
         <option value="µM" ${(c.targetUnit||'µM')==='µM'?'selected':''}>µM</option>
         <option value="nM" ${c.targetUnit==='nM'?'selected':''}>nM</option>
       </select></td>
+      <td class="exp-wells" data-cpd="${c.abbr}" style="font-size:11px;text-align:center">${countWellsForCpd(c.abbr)}</td>
       <td class="exp-result" data-cpd="${c.abbr}" style="font-size:10px;color:var(--t2)">—</td>
+      <td class="exp-bulk" data-cpd="${c.abbr}" style="font-size:11px">—</td>
     </tr>`;}).join('');
+  const dmsoRow=S.hasDmsoCtrl?`
+    <tr style="background:rgba(254,215,170,.25)">
+      <td style="font-family:var(--mono);font-size:11px">DMSO ctrl</td>
+      <td style="font-size:10px;color:var(--t2)">—</td>
+      <td colspan="2" style="font-size:10px;color:var(--t3)">vehicle (no drug) — all DMSO columns</td>
+      <td class="exp-wells" data-cpd="DMSO" style="font-size:11px;text-align:center">${countWellsForCpd('DMSO')}</td>
+      <td class="exp-result" data-cpd="DMSO" style="font-size:10px;color:var(--t2)">—</td>
+      <td class="exp-bulk" data-cpd="DMSO" style="font-size:11px">—</td>
+    </tr>`:'';
   return `<div class="card" id="exp-calc" style="margin-top:20px">
     <h3>💧 Exposure mix calculator (DMSO + PBS + Drug, 250µL/well)</h3>
-    <div class="note" style="margin-bottom:10px">Target (well) concentrations are set per-compound in <strong>Step 1 → Compounds</strong> — editing them here updates the same values there. Dilutes each compound's DMSO stock with PBS to the target well concentration, then tops up to the exposure-mix volume with PBS. Final DMSO in the <strong>whole 2000µL well</strong> must stay under the safety limit — vehicle/DMSO control wells get the same DMSO volume (no compound) to keep the variable constant.</div>
-    <div class="g3">
+    <div class="note" style="margin-bottom:10px">Target (well) concentrations are set per-compound in <strong>Step 1 → Compounds</strong> — editing them here updates the same values there. Each compound's mix is prepared <strong>once in bulk</strong> (enough for every well in its column(s) across all deepwell plates, plus overage) and then dispensed with a multichannel pipette. Final DMSO in the <strong>whole 2000µL well</strong> must stay under the safety limit. The DMSO control mix uses the same DMSO volume per well (no drug) and covers <strong>all</strong> DMSO control columns together.</div>
+    <div class="g4">
       <div class="field"><label>Exposure mix volume per well (µL)</label><input type="number" id="exp-mixvol" value="250"></div>
       <div class="field"><label>Total well volume (µL)</label><input type="number" id="exp-wellvol" value="2000"></div>
       <div class="field"><label>Max DMSO in well (%)</label><input type="number" id="exp-dmsomax" value="0.2" step="0.01"></div>
+      <div class="field"><label>Overage / dead volume (%)</label><input type="number" id="exp-overage" value="15" min="0" max="100"></div>
     </div>
     <div class="tw" style="margin-top:10px"><table>
-      <thead><tr><th>Compound</th><th>Stock</th><th>Target conc.</th><th>Unit</th><th>Result (per well)</th></tr></thead>
-      <tbody>${rows}</tbody>
+      <thead><tr><th>Compound</th><th>Stock</th><th>Target conc.</th><th>Unit</th><th style="text-align:center">Wells</th><th>Per well</th><th>Bulk mix to prepare (incl. overage)</th></tr></thead>
+      <tbody>${rows}${dmsoRow}</tbody>
     </table></div>
     <div class="note" style="margin-top:10px;margin-bottom:0" id="exp-dmso-summary">Enter target concentrations above to see DMSO volume and %DMSO-in-well for each compound.</div>
   </div>`;
 }
 function wireExposureCalc(){
-  document.querySelectorAll('.exp-target,.exp-target-unit,#exp-mixvol,#exp-wellvol,#exp-dmsomax').forEach(el=>{
+  document.querySelectorAll('.exp-target,.exp-target-unit,#exp-mixvol,#exp-wellvol,#exp-dmsomax,#exp-overage').forEach(el=>{
     el.addEventListener('input',computeExposureCalc);
   });
   document.querySelectorAll('.exp-target').forEach(el=>{
@@ -1161,11 +1248,27 @@ function wireExposureCalc(){
   computeExposureCalc();
 }
 const UNIT_TO_M={mM:1e-3,'µM':1e-6,nM:1e-9}; // convert to mol/L multiplier (relative)
+/* Number of occupied (non-water) deepwell wells that receive the exposure mix
+   for a given compound column label (use 'DMSO' for the vehicle controls). */
+function countWellsForCpd(abbr){
+  let n=0;
+  dwPlates.forEach(p=>{
+    for(let r=0;r<8;r++) for(let c=0;c<12;c++){
+      const cell=p.grid[r][c];
+      if(cell&&cell.stype!=='water'&&cell.cpd===abbr) n++;
+    }
+  });
+  return n;
+}
+function fmtVol(ul){return ul>=1000?(ul/1000).toFixed(2)+' mL':ul.toFixed(1)+' µL';}
 function computeExposureCalc(){
   const mixVol=parseFloat(document.getElementById('exp-mixvol').value)||250;
   const wellVol=parseFloat(document.getElementById('exp-wellvol').value)||2000;
   const dmsoMaxPct=parseFloat(document.getElementById('exp-dmsomax').value)||0.2;
+  const ovEl=parseFloat(document.getElementById('exp-overage').value);
+  const overage=1+((isNaN(ovEl)?15:ovEl)/100);
   const dmsoMaxVolUL=wellVol*(dmsoMaxPct/100);
+  let maxDmsoPerWell=0;
 
   let worstPct=0,worstCpd='';
   document.querySelectorAll('.exp-target').forEach(input=>{
@@ -1176,7 +1279,8 @@ function computeExposureCalc(){
     const unitSel=document.querySelector(`.exp-target-unit[data-cpd="${cpd}"]`);
     const targetUnit=unitSel?unitSel.value:'µM';
     const resultCell=document.querySelector(`.exp-result[data-cpd="${cpd}"]`);
-    if(!targetVal||targetVal<=0){ if(resultCell) resultCell.innerHTML='—'; return; }
+    const bulkCell=document.querySelector(`.exp-bulk[data-cpd="${cpd}"]`);
+    if(!targetVal||targetVal<=0){ if(resultCell) resultCell.innerHTML='—'; if(bulkCell) bulkCell.innerHTML='—'; return; }
 
     // Convert stock and target to the same unit basis (relative molarity factor)
     const stockInTargetUnits=stock*(UNIT_TO_M[stockUnit]/UNIT_TO_M[targetUnit]);
@@ -1187,7 +1291,15 @@ function computeExposureCalc(){
     const dmsoPctInWell=(dmsoVolUL/wellVol)*100;
     const overLimit=dmsoVolUL>dmsoMaxVolUL;
     if(overLimit&&dmsoPctInWell>worstPct){worstPct=dmsoPctInWell;worstCpd=cpd;}
+    if(dmsoVolUL>maxDmsoPerWell) maxDmsoPerWell=dmsoVolUL;
 
+    if(bulkCell){
+      const nW=countWellsForCpd(cpd);
+      const totalUL=nW*mixVol*overage,dmsoUL=nW*dmsoVolUL*overage,pbsUL=totalUL-dmsoUL;
+      bulkCell.innerHTML=nW===0?'<span style="color:var(--t3)">no wells</span>'
+        :pbsVolUL<0?'<span style="color:#dc2626">—</span>'
+        :`<strong>${fmtVol(totalUL)}</strong> total = DMSO stock <strong>${fmtVol(dmsoUL)}</strong> + PBS <strong>${fmtVol(pbsUL)}</strong>`;
+    }
     if(resultCell){
       resultCell.innerHTML=pbsVolUL<0
         ? `<span style="color:#dc2626">⚠ target too high — DMSO stock alone exceeds mix volume</span>`
@@ -1196,6 +1308,21 @@ function computeExposureCalc(){
                       :`<br><span style="color:#16a34a">✓ DMSO = ${dmsoPctInWell.toFixed(3)}% of well</span>`}`;
     }
   });
+
+  if(document.getElementById('dwc-result')) computeDwCalc(); // keep total-PBS card in sync
+  // DMSO vehicle control: same DMSO volume per well as the highest-DMSO compound
+  const dmsoBulk=document.querySelector('.exp-bulk[data-cpd="DMSO"]');
+  const dmsoRes=document.querySelector('.exp-result[data-cpd="DMSO"]');
+  if(dmsoBulk&&dmsoRes){
+    if(maxDmsoPerWell<=0){ dmsoRes.innerHTML='—'; dmsoBulk.innerHTML='—'; }
+    else{
+      const nW=countWellsForCpd('DMSO');
+      const totalUL=nW*mixVol*overage,dmsoUL=nW*maxDmsoPerWell*overage,pbsUL=totalUL-dmsoUL;
+      dmsoRes.innerHTML=`DMSO: <strong>${maxDmsoPerWell.toFixed(2)} µL</strong> + PBS: <strong>${(mixVol-maxDmsoPerWell).toFixed(2)} µL</strong><br><span style="color:var(--t3)">(matches highest-DMSO compound)</span>`;
+      dmsoBulk.innerHTML=nW===0?'<span style="color:var(--t3)">no wells</span>'
+        :`<strong>${fmtVol(totalUL)}</strong> total = DMSO <strong>${fmtVol(dmsoUL)}</strong> + PBS <strong>${fmtVol(pbsUL)}</strong>`;
+    }
+  }
 
   const summary=document.getElementById('exp-dmso-summary');
   if(summary){
@@ -1244,9 +1371,8 @@ function renderDwCalculator(){
       <div class="st"><div class="v">${c.dmsoPBS}</div><div class="l">DMSO ctrl + PBS (no FS)</div></div>
       <div class="st"><div class="v">${c.water}</div><div class="l">water (border) wells</div></div>
     </div>
-    <div class="g4">
+    <div class="g3">
       <div class="field"><label>Media (BYCFA+6cMuc) per well (µL)</label><input type="number" id="dwc-media" value="1350"></div>
-      <div class="field"><label>Exposure mix per well (µL)</label><input type="number" id="dwc-mix" value="250"></div>
       <div class="field"><label>Fecal slurry / PBS per well (µL)</label><input type="number" id="dwc-fs" value="400"></div>
       <div class="field"><label>Overage (%)</label><input type="number" id="dwc-overage" value="10" min="0" max="100"></div>
     </div>
@@ -1254,35 +1380,65 @@ function renderDwCalculator(){
   </div>`;
 }
 function wireDwCalc(){
-  ['dwc-media','dwc-mix','dwc-fs','dwc-overage'].forEach(id=>{
+  ['dwc-media','dwc-fs','dwc-overage'].forEach(id=>{
     const el=document.getElementById(id);
     if(el) el.addEventListener('input',computeDwCalc);
   });
   computeDwCalc();
 }
+/* PBS needed for the exposure mixes (all compounds + DMSO control), using each
+   compound's target concentration from Setup and the exposure calculator's
+   volume/overage settings. `missing` = compounds with no target concentration. */
+function exposurePbsTotal(){
+  const g=(id,d)=>{const el=document.getElementById(id);const v=el?parseFloat(el.value):NaN;return isNaN(v)?d:v;};
+  const mixVol=g('exp-mixvol',250),wellVol=g('exp-wellvol',2000),overage=1+g('exp-overage',15)/100;
+  let pbs=0,maxDmso=0,missing=0;
+  compounds.forEach(c=>{
+    const t=parseFloat(c.targetConc);
+    if(!t||t<=0){missing++;return;}
+    const stockInTarget=(c.stockConc||10)*(UNIT_TO_M[c.stockUnit||'mM']/UNIT_TO_M[c.targetUnit||'µM']);
+    const dmsoVol=t*wellVol/stockInTarget;
+    if(dmsoVol>maxDmso) maxDmso=dmsoVol;
+    pbs+=countWellsForCpd(c.abbr)*Math.max(0,mixVol-dmsoVol)*overage;
+  });
+  if(S.hasDmsoCtrl&&maxDmso>0) pbs+=countWellsForCpd('DMSO')*Math.max(0,mixVol-maxDmso)*overage;
+  return{pbs,missing};
+}
 function computeDwCalc(){
   const c=countDwWellTypes();
   const media=parseFloat(document.getElementById('dwc-media').value)||0;
-  const mix=parseFloat(document.getElementById('dwc-mix').value)||0;
   const fs=parseFloat(document.getElementById('dwc-fs').value)||0;
   const overage=1+(parseFloat(document.getElementById('dwc-overage').value)||0)/100;
 
   const nonWaterWells=c.sampleFS+c.dmsoFS+c.samplePBS+c.dmsoPBS;
-  const fsWells=c.sampleFS+c.dmsoFS; // wells getting fecal slurry
   const pbsForExposureWells=c.samplePBS+c.dmsoPBS; // wells getting PBS instead of FS
 
   const totalMedia=nonWaterWells*media*overage;
-  const totalMix=nonWaterWells*mix*overage; // exposure mix volume (DMSO+PBS+Drug combined) — composition handled in exposure calculator
-  const totalFS=fsWells*fs*overage;
+  // Fecal slurry is prepared per donor, so show it as n donors × per-donor volume.
+  const fsByDonor={};
+  dwPlates.forEach(p=>{
+    for(let r=0;r<8;r++) for(let cc=0;cc<12;cc++){
+      const cell=p.grid[r][cc];
+      if(cell&&cell.stype!=='water'&&cell.donor&&cell.donor!=='PBS') fsByDonor[cell.donor]=(fsByDonor[cell.donor]||0)+1;
+    }
+  });
+  const fsDonorWells=Object.values(fsByDonor);
+  const totalFS=(c.sampleFS+c.dmsoFS)*fs*overage; // wells getting fecal slurry
+  const fsEven=fsDonorWells.length>0&&fsDonorWells.every(n=>n===fsDonorWells[0]);
+  const fsCard=fsEven
+    ? `<div class="st"><div class="v">${fsDonorWells.length} × ${(fsDonorWells[0]*fs*overage/1000).toFixed(2)} mL</div><div class="l">fecal slurry: ${fsDonorWells.length} donors × amount per donor (${fsDonorWells[0]} wells each) = ${(totalFS/1000).toFixed(2)} mL total</div></div>`
+    : `<div class="st"><div class="v">${(totalFS/1000).toFixed(2)} mL</div><div class="l">fecal slurry total (donors differ in well count: ${Object.entries(fsByDonor).map(([d,n])=>'D'+d+'='+(n*fs*overage/1000).toFixed(2)+' mL').join(', ')})</div></div>`;
   const totalPBSasFS=pbsForExposureWells*fs*overage;
   const totalWater=c.water*2000*overage;
+  const expPbs=exposurePbsTotal();
+  const pbsTotalUL=totalPBSasFS+expPbs.pbs;
 
   document.getElementById('dwc-result').innerHTML=`
     <div class="st"><div class="v">${(totalMedia/1000).toFixed(2)} mL</div><div class="l">media (BYCFA+6cMuc) total</div></div>
-    <div class="st"><div class="v">${(totalMix/1000).toFixed(2)} mL</div><div class="l">exposure mix total (see exposure calc for DMSO/PBS/Drug split)</div></div>
-    <div class="st"><div class="v">${(totalFS/1000).toFixed(2)} mL</div><div class="l">fecal slurry total</div></div>
+    ${fsCard}
     <div class="st"><div class="v">${(totalPBSasFS/1000).toFixed(2)} mL</div><div class="l">PBS (replacing FS) total</div></div>
-    <div class="st" style="grid-column:span 2"><div class="v">${(totalWater/1000).toFixed(2)} mL</div><div class="l">water for border wells</div></div>
+    <div class="st"><div class="v">${(totalWater/1000).toFixed(2)} mL</div><div class="l">water for border wells</div></div>
+    <div class="st" style="grid-column:span 3"><div class="v">${(pbsTotalUL/1000).toFixed(2)} mL</div><div class="l">total PBS needed = ${(totalPBSasFS/1000).toFixed(2)} mL (replacing FS) + ${(expPbs.pbs/1000).toFixed(2)} mL (exposure mixes, ${document.getElementById('exp-overage')?.value||15}% overage from exposure calc)${expPbs.missing?` — ⚠ ${expPbs.missing} compound(s) without a target conc., not included`:''}</div></div>
   `;
 }
 
@@ -1389,6 +1545,7 @@ function renderLpView(){
   let h=renderToolbar('lp');
   h+=renderRunSettings();
   h+=`<div class="note">Autosampler has 4 physical slots (R/B/Y/G). Vial holder occupies slot <strong>${S.vhColor}</strong> — LCMS plates rotate through the remaining ${availableLcmsColors().length} slots: ${availableLcmsColors().join(', ')}.</div>`;
+  h+=`<div class="note"><strong>Layout:</strong> same arrangement as the collect plates, starting at A1 with no blank rows — each row is one replicate, each column one compound, and a donor's 3 replicate rows stay together (rows run on from H of one plate to A of the next). Rows that would need an extra plate are wrapped into the unused right-hand columns. The DMSO matrix column is not collected, so only one DMSO control column appears. <strong>Injection order follows the layout row by row</strong>; wells you add by hand are injected last.</div>`;
   h+=`<div class="psec"><div class="phr"><span class="pn">Vial holder (${S.vhColor}:)</span>
     <span style="font-size:11px;color:var(--t3)">6 rows A–F × 9 cols 1–9</span></div>
     ${renderVHToolbar()}
@@ -1691,14 +1848,20 @@ function buildSubmissionSequence(){
   // sit on the plate in the position generation already put them (start, or
   // before each timepoint block, per S.calStrat) — no separate handling needed.
   const orderedSamples=[];
+  // Injection order follows the generated layout sequence (`seq`, row by row as
+  // laid out on the plates, including rows wrapped into the spare columns).
+  // Wells without a `seq` (added by hand) go last, in plate/column/row order.
   lcmsPlates.forEach((lp,pi)=>{
-    for(let r=0;r<8;r++) for(let c=0;c<12;c++){
+    for(let c=0;c<12;c++) for(let r=0;r<8;r++){
       const cell=lp.grid[r][c];
       if(cell&&cell.stype!=='water'&&cell.stype!=='empty'){
-        orderedSamples.push({...cell,position:lp.color+':'+R8[r]+(c+1)});
+        orderedSamples.push({...cell,position:lp.color+':'+R8[r]+(c+1),_pi:pi,_r:r,_c:c});
       }
     }
   });
+  orderedSamples.sort((a,b)=>
+    ((a.seq??Infinity)-(b.seq??Infinity)||0)||(a._pi-b._pi)||(a._c-b._c)||(a._r-b._r));
+  orderedSamples.forEach(s=>{delete s._pi;delete s._r;delete s._c;});
 
   // Vial-based calibration mix (calLoc==='vial'): each concentration is prepared
   // once as a single vial (all test compounds mixed together), but may be
@@ -2170,6 +2333,23 @@ function updateStats(final){
    setup parameters, and every plate layout (deepwell/collect/LCMS/vial
    holder) rendered as plain tables — suitable as a saved lab record.
    ===================================================================== */
+/* Cell colours for the exported record — same palette as the on-screen plates. */
+function recCellStyle(cell){
+  if(!cell) return 'background:#f5f5f3';
+  if(cell==='blank') return 'background:#e5e7eb;color:#374151';
+  if(cell==='qc') return 'background:#d1fae5;color:#065f46';
+  if(cell==='cal-reserved') return 'background:#fef3c7;color:#92400e';
+  switch(cell.stype){
+    case 'water': return 'background:#bfdbfe;color:#1e3a8a';
+    case 'balance': return 'background:#f9fafb;color:#9ca3af';
+    case 'pbs': return 'background:#e2e8f0;color:#334155';
+    case 'dmso': return 'background:#fed7aa;color:#7c2d12';
+    case 'cal': return 'background:#fef3c7;color:#92400e';
+    case 'shutdown': return 'background:#1e1e1e;color:#e5e7eb';
+    case 'sample': {const{bg,fg}=donorBg(cell.donor);return `background:${bg};color:${fg}`;}
+  }
+  return '';
+}
 function plateToTable(grid,rows,cols,rowLabels,colLabels){
   let h='<table class="rec-plate"><thead><tr><th></th>';
   for(let c=0;c<cols;c++) h+=`<th>${colLabels[c]}</th>`;
@@ -2189,7 +2369,7 @@ function plateToTable(grid,rows,cols,rowLabels,colLabels){
         else if(cell.stype==='shutdown') txt='shutdown';
         else txt=cell.label||`${cell.cpd||''} D${cell.donor||''} r${cell.rep||''}${cell.tp!=null?' '+cell.tp+'h':''}`;
       }
-      h+=`<td>${txt}</td>`;
+      h+=`<td style="${recCellStyle(cell)}">${txt}</td>`;
     }
     h+='</tr>';
   }
@@ -2219,6 +2399,7 @@ function exportExperimentRecord(){
     table.rec-sub th{background:#f0f0ee}
     .plate-block{margin-bottom:24px}
     .tag-list-print{font-size:11px;color:#444;margin-bottom:6px}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
     @media print{ body{padding:10px} .no-print{display:none} }
     .print-btn{position:fixed;top:16px;right:16px;padding:8px 16px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px}
   </style></head><body>
